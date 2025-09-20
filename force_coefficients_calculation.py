@@ -1,4 +1,5 @@
 import torch
+from torch_geometric.data import Data
 
 
 
@@ -53,13 +54,59 @@ def compute_lift_coefficient(data: Data, eps=1e-9):
     Cl = F[1]/(q_ref * chord + eps)
     return float(Cl)
 
-ADD_LIFT = cfg.predict_graph_cl
-if ADD_LIFT:
-    print('Computing lift coefficients for training graphs (subset)...')
-    count=0
-    for d in raw_train:
-        cl = compute_lift_coefficient(d)
-        if cl is not None:
-            d.y_graph = torch.tensor([cl], dtype=torch.float32)
-            count += 1
-    print(f'Added y_graph to {count} graphs')
+def compute_force_coefficients(data: Data, eps=1e-9):
+    """
+    Compute drag coefficient (CD) and lift coefficient (CL) from surface pressure.
+    
+    Args:
+        data: PyG Data object with x (features), y (targets), pos (positions)
+        eps: small value to avoid division by zero
+    
+    Returns:
+        dict with 'CD' and 'CL' if successful, None otherwise
+    """
+    xvars = torch.tensor(data.x) if not isinstance(data.x, torch.Tensor) else data.x.cpu()
+    yvars = torch.tensor(data.y) if not isinstance(data.y, torch.Tensor) else data.y.cpu()
+    pos = torch.tensor(data.pos) if data.pos is not None and not isinstance(data.pos, torch.Tensor) else (data.pos.cpu() if data.pos is not None else data.pos)
+    if pos is None:
+        # fallback: construct pseudo-pos from first 2 normal dims (NOT ideal)
+        N = xvars.size(0)
+        pos = torch.zeros(N,2)
+        pos[:,0] = torch.linspace(0,1,N)
+        pos[:,1] = 0
+    
+    # Surface mask: feature columns 4-5 (normals) are not zero
+    normals = xvars[:,3:5]
+    surf_mask = (normals.abs().sum(dim=1) > 0)
+    surf_idx = torch.nonzero(surf_mask, as_tuple=False).squeeze(-1).long()
+    if surf_idx.numel() < 5:
+        return None
+    
+    pos_surf = pos[surf_idx]
+    ord_idx = order_surface(pos_surf).long()
+    ordered_pos = pos_surf[ord_idx]
+    ds, seg_vec = panel_lengths(ordered_pos)
+    n_nodes = normals[surf_idx[ord_idx]]
+    n_norm = n_nodes.norm(dim=1, keepdim=True).clamp_min(eps)
+    n_hat = n_nodes / n_norm
+    
+    # Freestream velocity: L2 norm of first two columns of features
+    u_inf = xvars[0,0]; v_inf = xvars[0,1]
+    U_inf = float(torch.sqrt(u_inf**2 + v_inf**2)) + eps
+    
+    temp = torch.index_select(yvars, 0, surf_idx)[:,2]
+    p_over_rho = temp[ord_idx]
+    Fp = (-p_over_rho.unsqueeze(1) * n_hat) * ds.unsqueeze(1)
+    F = Fp.sum(dim=0)  # Total force [Fx, Fy]
+    
+    # Chord length
+    chord = float(pos_surf[:,0].max() - pos_surf[:,0].min() + eps)
+    
+    # Dynamic pressure
+    q_ref = 0.5 * U_inf**2
+    
+    # Coefficients
+    CD = F[0] / (q_ref * chord + eps)
+    CL = F[1] / (q_ref * chord + eps)
+    
+    return {'CD': float(CD), 'CL': float(CL)}
