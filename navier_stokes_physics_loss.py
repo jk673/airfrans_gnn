@@ -711,10 +711,10 @@ class NavierStokesPhysicsLoss(nn.Module):
     def _bc_loss(self, pred_scaled: torch.Tensor, data: Any) -> torch.Tensor:
         """
         Soft BC penalties if masks exist in data:
-          - is_wall: no-slip u=0
-          - is_inlet & inlet_u (opt): u=profile
-          - is_farfield: u ~ U_inf(=1 in scaled), p~0
-          - is_outlet: p~0
+        - is_wall: no-slip u=0
+        - is_inlet & inlet_u (opt): u=profile
+        - is_farfield: u ~ U_inf(=1 in scaled), p~0
+        - is_outlet: p~0
         All masks are expected as [N] bool or 0/1 tensors.
         """
         device = pred_scaled.device
@@ -727,41 +727,65 @@ class NavierStokesPhysicsLoss(nn.Module):
         # wall: no-slip
         is_wall = getattr(data, 'is_wall', None)
         if is_wall is not None:
-            m = is_wall.to(device=device).bool()
-            if m.any():
-                loss_terms.append((u[m] ** 2).mean())
+            mask_w = is_wall.bool().to(device)
+            if mask_w.any():
+                # Check dimensions match (important for batched graphs)
+                if mask_w.size(0) != N:
+                    print(f"Warning: is_wall mask size {mask_w.size(0)} != pred size {N}, skipping BC loss")
+                    return torch.zeros(1, device=device)
+                u_wall = u[mask_w]
+                loss_terms.append((u_wall ** 2).mean())
 
         # inlet: velocity match (if inlet_u provided); else weak penalty to freestream (1,0)
         is_inlet = getattr(data, 'is_inlet', None)
         if is_inlet is not None:
-            m = is_inlet.to(device=device).bool()
-            if m.any():
+            mask_in = is_inlet.bool().to(device)
+            if mask_in.any():
+                if mask_in.size(0) != N:
+                    print(f"Warning: is_inlet mask size {mask_in.size(0)} != pred size {N}, skipping BC loss")
+                    return torch.zeros(1, device=device)
+                u_inlet = u[mask_in]
                 inlet_u = getattr(data, 'inlet_u', None)
                 if inlet_u is not None:
-                    inlet_u = inlet_u.to(device=device)
-                    loss_terms.append(((u[m] - inlet_u[m]) ** 2).mean())
+                    inlet_u = inlet_u.to(device)
+                    # Ensure inlet_u is properly sized for batched data
+                    if inlet_u.size(0) != mask_in.sum():
+                        # If inlet_u is provided per-graph, we need to expand it
+                        inlet_u_target = inlet_u[mask_in]
+                    else:
+                        inlet_u_target = inlet_u
+                    loss_terms.append(((u_inlet - inlet_u_target) ** 2).mean())
                 else:
-                    u_inf = torch.zeros_like(u); u_inf[:, 0] = 1.0
-                    loss_terms.append(((u[m] - u_inf[m]) ** 2).mean())
+                    target = torch.tensor([[1.0, 0.0]], device=device).expand_as(u_inlet)
+                    loss_terms.append(0.1 * ((u_inlet - target) ** 2).mean())
 
         # farfield: u≈U_inf and p≈0 (weak)
         is_far = getattr(data, 'is_farfield', None)
         if is_far is not None:
-            m = is_far.to(device=device).bool()
-            if m.any():
-                u_inf = torch.zeros_like(u); u_inf[:, 0] = 1.0
-                loss_terms.append(((u[m] - u_inf[m]) ** 2).mean())
-                loss_terms.append(((p[m] - 0.0) ** 2).mean())
+            mask_f = is_far.bool().to(device)
+            if mask_f.any():
+                if mask_f.size(0) != N:
+                    print(f"Warning: is_farfield mask size {mask_f.size(0)} != pred size {N}, skipping BC loss")
+                    return torch.zeros(1, device=device)
+                u_far = u[mask_f]
+                p_far = p[mask_f]
+                target_u = torch.tensor([[1.0, 0.0]], device=device).expand_as(u_far)
+                loss_terms.append(0.1 * ((u_far - target_u) ** 2).mean())
+                loss_terms.append(0.1 * (p_far ** 2).mean())
 
         # outlet: p≈0
         is_out = getattr(data, 'is_outlet', None)
         if is_out is not None:
-            m = is_out.to(device=device).bool()
-            if m.any():
-                loss_terms.append(((p[m] - 0.0) ** 2).mean())
+            mask_o = is_out.bool().to(device)
+            if mask_o.any():
+                if mask_o.size(0) != N:
+                    print(f"Warning: is_outlet mask size {mask_o.size(0)} != pred size {N}, skipping BC loss")
+                    return torch.zeros(1, device=device)
+                p_out = p[mask_o]
+                loss_terms.append((p_out ** 2).mean())
 
         if len(loss_terms) == 0:
-            return torch.zeros(1, device=device).mean()
+            return torch.zeros(1, device=device)
         return torch.stack(loss_terms).mean()
 
     # ---------- curriculum ramp ----------

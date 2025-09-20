@@ -1,0 +1,80 @@
+_wandb:
+    value:
+        cli_version: 0.21.1
+        e:
+            7dc4fa16vx960cjiy2hwdkdrrzecoozc:
+                codePath: 01_trainer.ipynb
+                codePathLocal: 01_trainer.ipynb
+                cpu_count: 16
+                cpu_count_logical: 32
+                cudaVersion: "13.0"
+                disk:
+                    /:
+                        total: "1999356555264"
+                        used: "380622176256"
+                email: jyk.snuai@gmail.com
+                executable: c:\Users\Kim\.conda\envs\pyg5090\python.exe
+                git:
+                    commit: b33a1176df8a40bcd1782158453a517b559c53fc
+                    remote: https://github.com/jk673/airfrans_gnn.git
+                gpu: NVIDIA GeForce RTX 5090
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Blackwell
+                      cudaCores: 21760
+                      memoryTotal: "34190917632"
+                      name: NVIDIA GeForce RTX 5090
+                      uuid: GPU-024d439b-50ff-e90b-2414-06f639f12003
+                host: DESKTOP-DOR3MKA
+                memory:
+                    total: "33446342656"
+                os: Windows-10-10.0.22631-SP0
+                program: c:\Users\Kim\Desktop\airfrans_gnn\01_trainer.ipynb
+                python: CPython 3.11.13
+                root: c:\Users\Kim\Desktop\airfrans_gnn
+                startedAt: "2025-09-20T10:25:46.540002Z"
+                writerId: 7dc4fa16vx960cjiy2hwdkdrrzecoozc
+        m: []
+        python_version: 3.11.13
+        t:
+            "1":
+                - 1
+                - 77
+            "2":
+                - 1
+                - 77
+            "3":
+                - 2
+                - 16
+                - 61
+            "4": 3.11.13
+            "5": 0.21.1
+            "8":
+                - 1
+                - 3
+            "12": 0.21.1
+            "13": windows-amd64
+amp:
+    value: false
+batch_size:
+    value: 1
+cont_w_target:
+    value: 0.1
+cont_w0:
+    value: 0.05
+epochs:
+    value: 100
+lr:
+    value: 0.0004
+mom_w_target:
+    value: 0.1
+mom_w0:
+    value: 0.05
+optimizer:
+    value: adam
+ramp_start_step:
+    value: 5400
+ramp_steps:
+    value: 14400
+scheduler:
+    value: null

@@ -98,9 +98,9 @@ python .\build_edges_from_downsampled.py `
   --surface-radius 0.01 `
   --surface-ring `
   --max-num-neighbors 48
-  --min-degree 2
-  --knn-backup-k 4
-  --knn-max-radius 0.05
+  --min-degree 3
+  --knn-backup-k 6
+  --knn-max-radius 0.08
 ```
 
 Output structure:

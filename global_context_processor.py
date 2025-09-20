@@ -388,6 +388,10 @@ class EnhancedCFDModelWithGlobalContext(nn.Module):
             nn.Linear(hidden_dim, output_dim)
         )
         
+    def get_node_embeddings(self, data):
+        """Return node features as embeddings"""
+        return data.x
+    
     def forward(self, data):
         device = data.x.device
         
@@ -433,3 +437,112 @@ class EnhancedCFDModelWithGlobalContext(nn.Module):
         # Decode to output
         output = self.decoder(x)
         return output
+    
+
+import torch
+import torch.nn as nn
+from multigraph_convolution import MultiScaleGraphConv, SpatialPyramidPooling
+
+class UltraEnhancedCFDModel(nn.Module):
+    """Enhanced CFD model with multi-scale convolutions and advanced features"""
+    
+    def __init__(self, 
+                 node_feat_dim=7,
+                 edge_feat_dim=5,
+                 hidden_dim=128,
+                 output_dim=4,
+                 num_mp_layers=7,
+                 num_scales=3,
+                 dropout_p=0.1,
+                 config=None):
+        super().__init__()
+        
+        # Base model with global context
+        self.base_model = EnhancedCFDModelWithGlobalContext(
+            node_feat_dim=node_feat_dim,
+            edge_feat_dim=edge_feat_dim,
+            hidden_dim=hidden_dim,
+            output_dim=output_dim,
+            num_mp_layers=num_mp_layers,
+            dropout_p=dropout_p,
+            config=config
+        )
+        
+        # Edge feature projection to match hidden_dim
+        self.edge_projector = nn.Linear(edge_feat_dim, hidden_dim)
+        
+        # Multi-scale convolutions
+        self.multi_scale_convs = nn.ModuleList([
+            MultiScaleGraphConv(hidden_dim, hidden_dim, num_scales)
+            for _ in range(3)  # Add 3 multi-scale layers
+        ])
+        
+        # Spatial pyramid pooling
+        self.spp = SpatialPyramidPooling(hidden_dim, pool_sizes=[1, 2, 4])
+        
+        # Enhanced output head with proper dimension handling
+        self.output_head = nn.Sequential(
+            nn.Linear(output_dim + hidden_dim, hidden_dim * 2),  # Combine base output + enhanced features
+            nn.LayerNorm(hidden_dim * 2),
+            nn.ReLU(),
+            nn.Dropout(dropout_p),
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout_p),
+            nn.Linear(hidden_dim, output_dim)
+        )
+        
+        # Residual connections
+        self.residual_weight = nn.Parameter(torch.tensor(0.1))
+        
+        # Feature encoder for raw node features
+        self.node_encoder = nn.Sequential(
+            nn.Linear(node_feat_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout_p)
+        )
+
+    def forward(self, data):
+        # Get base model predictions first
+        base_output = self.base_model(data)  # [N, output_dim=4]
+        
+        # Encode node features for multi-scale processing
+        x = self.node_encoder(data.x)  # [N, hidden_dim]
+        edge_index = data.edge_index
+        
+        # Project edge features to hidden_dim if they exist
+        edge_attr = None
+        if hasattr(data, 'edge_attr') and data.edge_attr is not None:
+            edge_attr = self.edge_projector(data.edge_attr)  # [E, hidden_dim]
+        
+        batch = data.batch if hasattr(data, 'batch') else torch.zeros(x.size(0), dtype=torch.long, device=x.device)
+        
+        # Store features for skip connections
+        features = []
+        
+        # Multi-scale processing
+        for conv in self.multi_scale_convs:
+            x_new = conv(x, edge_index, edge_attr)
+            x = x + self.residual_weight * x_new  # Residual connection
+            features.append(x)
+        
+        # Use the last multi-scale feature
+        enhanced_features = features[-1] if features else x
+        
+        # Spatial pyramid pooling (optional, can be disabled for node-level tasks)
+        # For node-level prediction, we need to broadcast back to all nodes
+        if False:  # Disabled for now as we need node-level predictions
+            x_pooled = self.spp(enhanced_features, batch)
+            # Broadcast pooled features back to nodes
+            batch_size = batch.max().item() + 1 if batch.numel() > 0 else 1
+            enhanced_features = x_pooled[batch]
+        
+        # Combine base output with enhanced features
+        combined = torch.cat([base_output, enhanced_features], dim=-1)
+        
+        # Final prediction
+        out = self.output_head(combined)
+        
+        return out
