@@ -27,7 +27,9 @@ share/python-wheels/
 MANIFEST
 Dataset/
 .vscode/
-processed_edgs/
+processed_edges/
+prebuilt_edges/
+.claude/
 *.pt
 
 # PyInstaller
