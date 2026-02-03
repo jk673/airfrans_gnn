@@ -5,7 +5,7 @@ description = "AirfRANS GNN training pipeline"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "torch",
-    "torch-geometric",
+    "torch-geometric==2.7.0",
     "torch-scatter",
     "torch-sparse",
     "torch-cluster",

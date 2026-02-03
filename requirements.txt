@@ -4,7 +4,7 @@ torch
 torch-scatter
 torch-sparse
 torch-cluster
-torch-geometric
+torch-geometric==2.7.0
 
 # ── Scientific / Numerical ─────────────────────────────────────
 numpy
