@@ -1,0 +1,39 @@
+[project]
+name = "airfrans-gnn"
+version = "0.1.0"
+description = "AirfRANS GNN training pipeline"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "torch",
+    "torch-geometric",
+    "torch-scatter",
+    "torch-sparse",
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "tqdm",
+    "wandb",
+    "ipykernel",
+    "psutil",
+]
+
+[project.optional-dependencies]
+optuna = [
+    "optuna",
+    "joblib",
+]
+test = [
+    "pytest",
+]
+all = [
+    "airfrans-gnn[optuna,test]",
+]
+
+[tool.uv]
+extra-index-url = [
+    "https://download.pytorch.org/whl/cu128",
+]
+
+[tool.uv.extra-build-dependencies]
+torch-scatter = ["torch"]
+torch-sparse = ["torch"]

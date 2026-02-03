@@ -1,0 +1,17 @@
+# ── Core: PyTorch (CUDA 12.8) ──────────────────────────────────
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch
+torch-scatter
+torch-sparse
+torch-geometric
+
+# ── Scientific / Numerical ─────────────────────────────────────
+numpy
+scipy
+matplotlib
+
+# ── Utilities ──────────────────────────────────────────────────
+tqdm
+psutil
+wandb
+ipykernel

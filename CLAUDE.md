@@ -1,0 +1,100 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+AirfRANS GNN is a physics-informed Graph Neural Network framework for aerodynamic surrogate modeling of 2D airfoil CFD. It predicts velocity (u, v), pressure (Cp), and turbulent viscosity (nu_t) over airfoil meshes using message-passing neural networks with RANS-based physics loss.
+
+## Environment Setup
+
+```bash
+# Python 3.11 required
+uv sync   # uses pyproject.toml with PyTorch CUDA 12.8 index
+```
+
+Key dependencies: PyTorch, PyTorch Geometric, torch-scatter, torch-sparse, wandb, scipy.
+
+## Commands
+
+### Data Preparation Pipeline
+
+```bash
+# Step 1: Downsample raw AirfRANS graphs (100k+ nodes → 15-30k)
+python downsample_airfrans.py --root Dataset --task scarce --out-dir downsampled_graphs
+
+# Step 2: Build multi-scale radius-graph edges
+python build_edges_from_downsampled.py --in-dir downsampled_graphs --out-dir prebuilt_edges --task scarce
+```
+
+### Training
+
+Training runs through Jupyter notebooks:
+- `01_trainer.ipynb` — Main training pipeline
+- `02_optuna_training.ipynb` — Hyperparameter optimization with Optuna
+- `02_trainer_multi_scale.ipynb` — Multi-scale model variant
+
+### Tests
+
+```bash
+pytest tests/ -v
+pytest tests/test_continuity_loss.py::test_continuity_zero_divergence_gt_only -v  # single test
+```
+
+## Architecture
+
+### Pipeline Flow
+
+Raw AirfRANS data → `downsample_airfrans.py` (adaptive voxel sampling, preserves surface nodes) → `build_edges_from_downsampled.py` (radius-graph edges with KNN backup) → Training notebook (normalize, train with physics loss, evaluate)
+
+### Model: `EnhancedCFDModelWithGlobalContext` (defined in `01_trainer.ipynb`)
+
+- **Input**: 7D node features (freestream velocity, wall distance, wall normals, position) + 5D edge features
+- **Output**: 4D predictions (u, v, pressure, nu_t)
+- **Architecture**: Node/Edge encoders → 14 message-passing layers → optional `GlobalContextProcessor` (attention-based) → output decoder
+- Configuration lives in `SmokeCfg` dataclass inside `01_trainer.ipynb`
+
+### Physics-Informed Loss (`navier_stokes_physics_loss.py`)
+
+Combined loss with curriculum learning:
+- **Data loss**: MSE on predictions
+- **Continuity loss**: Conservative divergence (∇·u = 0)
+- **Momentum loss**: RANS momentum balance with skew-symmetric convection
+- **BC loss**: No-slip walls, inlet/outlet/farfield conditions
+
+Physics weights ramp up over training via linear or cosine curriculum schedule. `airfrans_utils.py:prepare_airfrans_graph_for_physics()` precomputes node areas, boundary masks, wall normals, and inlet velocities needed by the physics loss.
+
+### Key Module Responsibilities
+
+| File | Purpose |
+|------|---------|
+| `downsample_airfrans.py` | Adaptive voxel downsampling with surface preservation |
+| `build_edges_from_downsampled.py` | Edge construction wrapper |
+| `preprocess_airfrans_edges.py` | Radius-graph edge building, degree floor enforcement, edge feature computation |
+| `airfrans_utils.py` | Physics preprocessing (areas, BC masks, wall normals) |
+| `navier_stokes_physics_loss.py` | RANS physics loss with curriculum scheduling |
+| `turbulent_modeling_physics_loss.py` | Turbulence model extensions |
+| `global_context_processor.py` | Attention-based global context with cross-attention and Set2Set pooling |
+| `multigraph_convolution.py` | Multi-scale and dilated graph convolutions |
+| `force_coefficients_calculation.py` | Lift/drag coefficient integration from surface pressure |
+| `utils.py` / `utils_prune.py` | Graph utilities and isolated node pruning |
+
+### Edge Attribute Schema
+
+The codebase supports two edge feature orderings detected automatically:
+- `[dist, dir_x, dir_y]` (default)
+- `[dx, dy, dist]` (dxdy format)
+
+Detection heuristic is in `preprocess_airfrans_edges.py` based on column value ranges.
+
+### Batching
+
+Uses PyG `Batch.from_data_list()` — multiple variable-size graphs concatenated into one with `batch` tensor for per-graph operations. The `NormalizedDataset` class in the training notebook handles feature normalization with StandardScaler.
+
+## Data Artifacts
+
+- `Dataset/` — Raw AirfRANS dataset
+- `downsampled_graphs/<task>/{train,test}/graph_*.pt` — Downsampled graphs
+- `prebuilt_edges/<task>/{train,test}/graph_*.pt` — Graphs with precomputed edges
+
+Prebuilt graphs are aligned to the original dataset via `orig_index` field.
