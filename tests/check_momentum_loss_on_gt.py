@@ -6,8 +6,8 @@ from typing import Optional
 
 # Local imports
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from navier_stokes_physics_loss import NavierStokesPhysicsLoss
-from preprocess_airfrans_edges import Params, build_edges_for_graph
+from src.navier_stokes_physics_loss import NavierStokesPhysicsLoss
+from src.preprocess_airfrans_edges import Params, build_edges_for_graph
 
 try:
     from torch_geometric.datasets import AirfRANS

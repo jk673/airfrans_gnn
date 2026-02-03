@@ -73,6 +73,7 @@ dependencies = [
     { name = "psutil" },
     { name = "scipy" },
     { name = "torch" },
+    { name = "torch-cluster" },
     { name = "torch-geometric" },
     { name = "torch-scatter" },
     { name = "torch-sparse" },
@@ -106,6 +107,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'" },
     { name = "scipy" },
     { name = "torch" },
+    { name = "torch-cluster" },
     { name = "torch-geometric" },
     { name = "torch-scatter" },
     { name = "torch-sparse" },
@@ -1372,6 +1374,15 @@ wheels = [
     { url = "https://download.pytorch.org/whl/cu128/torch-2.10.0%2Bcu128-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:1d01ffaebf64715c0f507a39463149cb19e596ff702bd4bcf862601f2881dabc" },
     { url = "https://download.pytorch.org/whl/cu128/torch-2.10.0%2Bcu128-cp311-cp311-win_amd64.whl", hash = "sha256:3523fda6e2cfab2b04ae09b1424681358e508bb3faa11ceb67004113d5e7acad" },
 ]
+
+[[package]]
+name = "torch-cluster"
+version = "1.6.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/54/31/e7f7a28253cd907404eb652607613b35779140b326d15d0636511b7b9438/torch_cluster-1.6.3.tar.gz", hash = "sha256:78d5a930a5bbd0d8788df8c6d66addd68d6dd292fe3edb401e3dacba26308152", size = 54550, upload-time = "2023-10-12T06:52:43.728Z" }
 
 [[package]]
 name = "torch-geometric"

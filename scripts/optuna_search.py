@@ -22,14 +22,14 @@ from dataclasses import asdict
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from training_common import (
+from src.training_common import (
     SmokeCfg, DataBundle,
     set_seed, collate_pyg,
     load_and_prepare_data, compute_loss_with_physics,
     create_lr_scheduler,
 )
-from navier_stokes_physics_loss import NavierStokesPhysicsLoss
-from global_context_processor import EnhancedCFDModelWithGlobalContext
+from src.navier_stokes_physics_loss import NavierStokesPhysicsLoss
+from src.global_context_processor import EnhancedCFDModelWithGlobalContext
 
 import optuna
 from optuna.trial import TrialState

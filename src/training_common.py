@@ -26,8 +26,8 @@ from torch.cuda.amp import GradScaler, autocast
 from tqdm.auto import tqdm
 import wandb
 
-from airfrans_utils import prepare_airfrans_graph_for_physics, build_bc_masks_airfrans
-from utils import prep_graph, validate_edges, _prep_graph_for_norm
+from .airfrans_utils import prepare_airfrans_graph_for_physics, build_bc_masks_airfrans
+from .utils import prep_graph, validate_edges, _prep_graph_for_norm
 
 
 # ---------------------------------------------------------------------------

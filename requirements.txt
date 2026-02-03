@@ -15,3 +15,10 @@ tqdm
 psutil
 wandb
 ipykernel
+
+# ── Hyperparameter tuning ──────────────────────────────────────
+optuna
+joblib
+
+# ── Testing ─────────────────────────────────────────────────────
+pytest

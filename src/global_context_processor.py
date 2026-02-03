@@ -441,7 +441,7 @@ class EnhancedCFDModelWithGlobalContext(nn.Module):
 
 import torch
 import torch.nn as nn
-from multigraph_convolution import MultiScaleGraphConv, SpatialPyramidPooling
+from .multigraph_convolution import MultiScaleGraphConv, SpatialPyramidPooling
 
 class UltraEnhancedCFDModel(nn.Module):
     """Enhanced CFD model with multi-scale convolutions and advanced features"""

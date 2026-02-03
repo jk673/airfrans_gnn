@@ -8,7 +8,7 @@ No edges are created here.
 Defaults match the notebook-equivalent adaptive voxel with surface-preserving behavior.
 """
 import os, math, argparse
-from typing import Optional
+import inspect
 
 import torch
 from torch_geometric.datasets import AirfRANS
@@ -34,22 +34,27 @@ def get_surface_mask(d: Data) -> torch.Tensor:
     if x is not None and x.size(1) >= 5:
         wall = x[:, 2]
         nxy = x[:, 3:5]
-        return (wall < 1e-6) | (nxy.abs().sum(dim=1) > 0)
+        return (wall < 1e-6) | (nxy.abs().sum(dim=1) > 1e-8)
     elif x is not None and x.size(1) >= 3:
         wall = x[:, 2]
         return (wall < 1e-6)
     else:
-        return torch.zeros(d.x.size(0), dtype=torch.bool, device=d.x.device)
+        n = d.num_nodes or (x.size(0) if x is not None else 0)
+        dev = x.device if x is not None else 'cpu'
+        return torch.zeros(n, dtype=torch.bool, device=dev)
 
 
 def voxel_preserve_surface(d: Data, voxel_size: float) -> Data:
-    N = d.x.size(0)
+    src = d.x if d.x is not None else d.pos
+    N = d.num_nodes if d.num_nodes is not None else (src.size(0) if src is not None else 0)
     surf = get_surface_mask(d)
     si = torch.nonzero(surf, as_tuple=False).view(-1)
     vi = torch.nonzero(~surf, as_tuple=False).view(-1)
     if vi.numel() == 0:
         return d
-    p_all = d.pos if (hasattr(d, 'pos') and d.pos is not None) else d.x[:, :2]
+    p_all = d.pos if (hasattr(d, 'pos') and d.pos is not None) else src
+    if p_all is None:
+        return d
     p2 = p_all[:, :2]
     p2_v = p2[vi].cpu()
     cl = voxel_grid(p2_v, size=float(voxel_size), batch=torch.zeros(p2_v.size(0), dtype=torch.long))
@@ -60,7 +65,7 @@ def voxel_preserve_surface(d: Data, voxel_size: float) -> Data:
     keep_v = vi[pairs[pick, 1].to(vi.device)]
     keep = torch.unique(torch.cat([si, keep_v], dim=0), sorted=True)
     new = {}
-    for k, v in d:
+    for k, v in d.to_dict().items():
         if torch.is_tensor(v) and v.dim() >= 1 and v.size(0) == N:
             new[k] = v[keep]
         else:
@@ -72,20 +77,36 @@ def voxel_preserve_surface(d: Data, voxel_size: float) -> Data:
 
 
 def adapt_voxel(d: Data, tmin: int, tmax: int, frac: float, iters: int) -> Data:
-    pos2 = (d.pos if hasattr(d, 'pos') and d.pos is not None else d.x)[:, :2]
+    src = d.pos if hasattr(d, 'pos') and d.pos is not None else d.x
+    if src is None:
+        return d
+    pos2 = src[:, :2]
     chord = estimate_chord_length(pos2)
     f = max(1e-5, float(frac))
     best = None
     for _ in range(max(1, int(iters))):
         v = chord * f
         sub = voxel_preserve_surface(d, v)
-        n = int(sub.x.size(0))
+        if sub.x is not None:
+            n = int(sub.x.size(0))
+        elif hasattr(sub, 'pos') and sub.pos is not None:
+            n = int(sub.pos.size(0))
+        else:
+            n = int(sub.num_nodes or 0)
         if tmin <= n <= tmax:
             return sub
         mid = 0.5 * (tmin + tmax)
         if n > 0:
             f = min(1.0, max(1e-5, f * math.sqrt(n / max(1.0, mid))))
-        if best is None or abs(n - mid) < abs(best.x.size(0) - mid):
+
+        def _node_count(data: Data) -> int:
+            if data.x is not None:
+                return int(data.x.size(0))
+            if hasattr(data, 'pos') and data.pos is not None:
+                return int(data.pos.size(0))
+            return int(data.num_nodes or 0)
+
+        if best is None or abs(n - mid) < abs(_node_count(best) - mid):
             best = sub
     return best if best is not None else d
 
@@ -104,12 +125,11 @@ def main():
     ap.add_argument('--voxel-iters', type=int, default=5)
     args = ap.parse_args()
 
-    try:
-        ds_train = AirfRANS(root=args.root, train=True, task=args.task)
-        ds_test = AirfRANS(root=args.root, train=False, task=args.task)
-    except TypeError:
-        ds_train = AirfRANS(root=args.root, train=True)
-        ds_test = AirfRANS(root=args.root, train=False)
+    init_params = inspect.signature(AirfRANS.__init__).parameters
+    task_kwargs = {'task': args.task} if 'task' in init_params else {}
+
+    ds_train = AirfRANS(root=args.root, train=True, **task_kwargs)
+    ds_test = AirfRANS(root=args.root, train=False, **task_kwargs)
 
     if args.limit_train is not None:
         from torch.utils.data import Subset
@@ -132,7 +152,7 @@ def main():
             d2 = adapt_voxel(d2, args.target_min_nodes, args.target_max_nodes, args.voxel_frac, args.voxel_iters)
             # Save minimal fields (no edges yet)
             keep = {}
-            for k, v in d2:
+            for k, v in d2.to_dict().items():
                 if k in ('x', 'y', 'pos', 'surf'):
                     keep[k] = v
             # Always include original dataset index to guarantee downstream alignment

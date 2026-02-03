@@ -54,7 +54,7 @@ Raw AirfRANS data → `downsample_airfrans.py` (adaptive voxel sampling, preserv
 - **Architecture**: Node/Edge encoders → 14 message-passing layers → optional `GlobalContextProcessor` (attention-based) → output decoder
 - Configuration lives in `SmokeCfg` dataclass inside `01_trainer.ipynb`
 
-### Physics-Informed Loss (`navier_stokes_physics_loss.py`)
+### Physics-Informed Loss (`src/navier_stokes_physics_loss.py`)
 
 Combined loss with curriculum learning:
 - **Data loss**: MSE on predictions
@@ -62,7 +62,7 @@ Combined loss with curriculum learning:
 - **Momentum loss**: RANS momentum balance with skew-symmetric convection
 - **BC loss**: No-slip walls, inlet/outlet/farfield conditions
 
-Physics weights ramp up over training via linear or cosine curriculum schedule. `airfrans_utils.py:prepare_airfrans_graph_for_physics()` precomputes node areas, boundary masks, wall normals, and inlet velocities needed by the physics loss.
+Physics weights ramp up over training via linear or cosine curriculum schedule. `src/airfrans_utils.py:prepare_airfrans_graph_for_physics()` precomputes node areas, boundary masks, wall normals, and inlet velocities needed by the physics loss.
 
 ### Key Module Responsibilities
 
@@ -70,14 +70,14 @@ Physics weights ramp up over training via linear or cosine curriculum schedule. 
 |------|---------|
 | `downsample_airfrans.py` | Adaptive voxel downsampling with surface preservation |
 | `build_edges_from_downsampled.py` | Edge construction wrapper |
-| `preprocess_airfrans_edges.py` | Radius-graph edge building, degree floor enforcement, edge feature computation |
-| `airfrans_utils.py` | Physics preprocessing (areas, BC masks, wall normals) |
-| `navier_stokes_physics_loss.py` | RANS physics loss with curriculum scheduling |
-| `turbulent_modeling_physics_loss.py` | Turbulence model extensions |
-| `global_context_processor.py` | Attention-based global context with cross-attention and Set2Set pooling |
-| `multigraph_convolution.py` | Multi-scale and dilated graph convolutions |
-| `force_coefficients_calculation.py` | Lift/drag coefficient integration from surface pressure |
-| `utils.py` / `utils_prune.py` | Graph utilities and isolated node pruning |
+| `src/preprocess_airfrans_edges.py` | Radius-graph edge building, degree floor enforcement, edge feature computation |
+| `src/airfrans_utils.py` | Physics preprocessing (areas, BC masks, wall normals) |
+| `src/navier_stokes_physics_loss.py` | RANS physics loss with curriculum scheduling |
+| `src/turbulent_modeling_physics_loss.py` | Turbulence model extensions |
+| `src/global_context_processor.py` | Attention-based global context with cross-attention and Set2Set pooling |
+| `src/multigraph_convolution.py` | Multi-scale and dilated graph convolutions |
+| `src/force_coefficients_calculation.py` | Lift/drag coefficient integration from surface pressure |
+| `src/utils.py` / `src/utils_prune.py` | Graph utilities and isolated node pruning |
 
 ### Edge Attribute Schema
 
@@ -85,7 +85,7 @@ The codebase supports two edge feature orderings detected automatically:
 - `[dist, dir_x, dir_y]` (default)
 - `[dx, dy, dist]` (dxdy format)
 
-Detection heuristic is in `preprocess_airfrans_edges.py` based on column value ranges.
+Detection heuristic is in `src/preprocess_airfrans_edges.py` based on column value ranges.
 
 ### Batching
 

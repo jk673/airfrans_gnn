@@ -2,7 +2,7 @@ import torch
 from torch_geometric.data import Data
 from typing import cast
 
-from preprocess_airfrans_edges import Params, build_edges_for_graph
+from src.preprocess_airfrans_edges import Params, build_edges_for_graph
 from physics_loss import div_from_edge_flux
 
 

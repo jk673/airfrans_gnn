@@ -11,7 +11,7 @@ from torch_geometric.data import Data
 from tqdm import tqdm
 
 
-def _import_preprocess_module(path: str = 'preprocess_airfrans_edges.py'):
+def _import_preprocess_module(path: str = 'src/preprocess_airfrans_edges.py'):
     import importlib.util, sys
     path = os.path.abspath(path)
     spec = importlib.util.spec_from_file_location('pre_air', path)
@@ -39,7 +39,7 @@ def main():
     ap.add_argument('--knn-max-radius', type=float, default=0.05)
     args = ap.parse_args()
 
-    pre_air = _import_preprocess_module('preprocess_airfrans_edges.py')
+    pre_air = _import_preprocess_module('src/preprocess_airfrans_edges.py')
     class EdgeParams(pre_air.Params):
         pass
     params = EdgeParams(root='.', preset='scarce', task=args.task, include_test=False,
@@ -70,26 +70,31 @@ def main():
                 if args.denormalize:
                     try:
                         # Denormalize x and pos (positions are typically in x[:,:2] or d.pos)
-                        if hasattr(d2, 'x_norm_params') and d2.x_norm_params is not None and isinstance(getattr(d2, 'x', None), torch.Tensor):
+                        x_val = getattr(d2, 'x', None)
+                        if hasattr(d2, 'x_norm_params') and d2.x_norm_params is not None and isinstance(x_val, torch.Tensor):
                             xn = d2.x_norm_params
-                            x_mean = xn['mean']; x_scale = xn['scale']
-                            # Convert to tensors, match dtype if available
-                            x_mean_t = torch.as_tensor(x_mean)
-                            x_scale_t = torch.as_tensor(x_scale)
-                            d2.x = d2.x * x_scale_t + x_mean_t
+                            x_mean = xn.get('mean'); x_scale = xn.get('scale')
+                            if x_mean is not None and x_scale is not None:
+                                # Convert to tensors, match dtype if available
+                                x_mean_t = torch.as_tensor(x_mean, dtype=x_val.dtype)
+                                x_scale_t = torch.as_tensor(x_scale, dtype=x_val.dtype)
+                                d2.x = x_val * x_scale_t + x_mean_t
                         if hasattr(d2, 'pos') and d2.pos is not None and hasattr(d2, 'pos_norm_params') and d2.pos_norm_params is not None:
                             pn = d2.pos_norm_params
-                            p_mean = pn['mean']; p_scale = pn['scale']
-                            p_mean_t = torch.as_tensor(p_mean, dtype=d2.pos.dtype)
-                            p_scale_t = torch.as_tensor(p_scale, dtype=d2.pos.dtype)
-                            d2.pos = d2.pos * p_scale_t + p_mean_t
+                            p_mean = pn.get('mean'); p_scale = pn.get('scale')
+                            if p_mean is not None and p_scale is not None:
+                                p_mean_t = torch.as_tensor(p_mean, dtype=d2.pos.dtype)
+                                p_scale_t = torch.as_tensor(p_scale, dtype=d2.pos.dtype)
+                                d2.pos = d2.pos * p_scale_t + p_mean_t
                         # Targets (y)
-                        if isinstance(getattr(d2, 'y', None), torch.Tensor) and hasattr(d2, 'y_norm_params') and d2.y_norm_params is not None:
+                        y_val = getattr(d2, 'y', None)
+                        if isinstance(y_val, torch.Tensor) and hasattr(d2, 'y_norm_params') and d2.y_norm_params is not None:
                             yn = d2.y_norm_params
-                            y_mean = yn['mean']; y_scale = yn['scale']
-                            y_mean_t = torch.as_tensor(y_mean)
-                            y_scale_t = torch.as_tensor(y_scale)
-                            d2.y = d2.y * y_scale_t + y_mean_t
+                            y_mean = yn.get('mean'); y_scale = yn.get('scale')
+                            if y_mean is not None and y_scale is not None:
+                                y_mean_t = torch.as_tensor(y_mean)
+                                y_scale_t = torch.as_tensor(y_scale)
+                                d2.y = y_val * y_scale_t + y_mean_t
                     except Exception as ee:
                         print(f'[edge] warning: denormalize failed for {path}: {ee}')
 
