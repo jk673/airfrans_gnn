@@ -1,0 +1,4 @@
+# Extra dependencies for Optuna hyperparameter tuning (02_optuna_training.ipynb)
+-r requirements.txt
+optuna
+joblib
