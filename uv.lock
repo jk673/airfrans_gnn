@@ -108,7 +108,7 @@ requires-dist = [
     { name = "scipy" },
     { name = "torch" },
     { name = "torch-cluster" },
-    { name = "torch-geometric" },
+    { name = "torch-geometric", specifier = "==2.7.0" },
     { name = "torch-scatter" },
     { name = "torch-sparse" },
     { name = "tqdm" },
