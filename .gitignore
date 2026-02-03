@@ -45,3 +45,4 @@ downsampled_graphs/
 prebuilt_edges/
 processed_edges/
 *.pt
+*.png

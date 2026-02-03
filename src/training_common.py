@@ -12,7 +12,7 @@ import glob
 import random
 import contextlib
 from dataclasses import dataclass, asdict
-from typing import Optional
+from typing import Optional, Any, cast
 
 import numpy as np
 import torch
@@ -152,8 +152,8 @@ class SmokeCfg:
 
 class StandardScaler:
     def __init__(self):
-        self.mean = None
-        self.std = None
+        self.mean: Optional[torch.Tensor] = None
+        self.std: Optional[torch.Tensor] = None
 
     def fit(self, t: torch.Tensor):
         self.mean = t.mean(dim=0)
@@ -161,9 +161,13 @@ class StandardScaler:
         return self
 
     def transform(self, t: torch.Tensor):
+        if self.mean is None or self.std is None:
+            raise ValueError("StandardScaler must be fitted before calling transform.")
         return (t - self.mean) / self.std
 
     def inverse(self, t: torch.Tensor):
+        if self.mean is None or self.std is None:
+            raise ValueError("StandardScaler must be fitted before calling inverse.")
         return t * self.std + self.mean
 
 
@@ -605,7 +609,7 @@ def create_lr_scheduler(optimizer, config):
 
 def init_wandb(scfg, loss_fn=None):
     """Initialize W&B run and configure epoch-only logging."""
-    wandb_init_kwargs = dict(
+    wandb_init_kwargs: dict[str, Any] = dict(
         project=getattr(scfg, "wandb_project", "airfrans-gnn"),
         name=getattr(scfg, "wandb_run_name", None),
         tags=getattr(scfg, "wandb_tags", None),
@@ -621,7 +625,8 @@ def init_wandb(scfg, loss_fn=None):
         }
     )
     if loss_fn is not None:
-        wandb_init_kwargs["config"].update({
+        config = cast(dict[str, Any], wandb_init_kwargs["config"])
+        config.update({
             "cont_w0": getattr(loss_fn, "cont_w0", None),
             "cont_w_target": getattr(loss_fn, "cont_w_target", None),
             "mom_w0": getattr(loss_fn, "mom_w0", None),
@@ -630,7 +635,7 @@ def init_wandb(scfg, loss_fn=None):
             "ramp_start_step": getattr(loss_fn, "ramp_start_step", 0),
         })
 
-    wandb_run = wandb.init(**wandb_init_kwargs)
+    wandb_run = wandb.init(**cast(dict[str, Any], wandb_init_kwargs))
 
     # Epoch-only logging: swallow per-step logs (commit=False)
     if getattr(scfg, "log_epoch_only", True):
@@ -642,7 +647,9 @@ def init_wandb(scfg, loss_fn=None):
                     commit = True
                 if commit is False:
                     return
-                return _wandb_orig_log(data, step=step, commit=commit, *args, **kwargs)
+                if data is None:
+                    return
+                return _wandb_orig_log(cast(dict[str, Any], data), step=step, commit=commit, *args, **kwargs)
 
             wandb.log = _log_epoch_only
         except Exception:

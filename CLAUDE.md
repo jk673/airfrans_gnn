@@ -21,10 +21,10 @@ Key dependencies: PyTorch, PyTorch Geometric, torch-scatter, torch-sparse, wandb
 
 ```bash
 # Step 1: Downsample raw AirfRANS graphs (100k+ nodes → 15-30k)
-python downsample_airfrans.py --root Dataset --task scarce --out-dir downsampled_graphs
+python preprocessing/downsample_airfrans.py --root Dataset --task scarce --out-dir downsampled_graphs
 
 # Step 2: Build multi-scale radius-graph edges
-python build_edges_from_downsampled.py --in-dir downsampled_graphs --out-dir prebuilt_edges --task scarce
+python preprocessing/build_edges_from_downsampled.py --in-dir downsampled_graphs --out-dir prebuilt_edges --task scarce
 ```
 
 ### Training
@@ -45,7 +45,7 @@ pytest tests/test_continuity_loss.py::test_continuity_zero_divergence_gt_only -v
 
 ### Pipeline Flow
 
-Raw AirfRANS data → `downsample_airfrans.py` (adaptive voxel sampling, preserves surface nodes) → `build_edges_from_downsampled.py` (radius-graph edges with KNN backup) → Training notebook (normalize, train with physics loss, evaluate)
+Raw AirfRANS data → `preprocessing/downsample_airfrans.py` (adaptive voxel sampling, preserves surface nodes) → `preprocessing/build_edges_from_downsampled.py` (radius-graph edges with KNN backup) → Training notebook (normalize, train with physics loss, evaluate)
 
 ### Model: `EnhancedCFDModelWithGlobalContext` (defined in `01_trainer.ipynb`)
 
@@ -68,8 +68,8 @@ Physics weights ramp up over training via linear or cosine curriculum schedule. 
 
 | File | Purpose |
 |------|---------|
-| `downsample_airfrans.py` | Adaptive voxel downsampling with surface preservation |
-| `build_edges_from_downsampled.py` | Edge construction wrapper |
+| `preprocessing/downsample_airfrans.py` | Adaptive voxel downsampling with surface preservation |
+| `preprocessing/build_edges_from_downsampled.py` | Edge construction wrapper |
 | `src/preprocess_airfrans_edges.py` | Radius-graph edge building, degree floor enforcement, edge feature computation |
 | `src/airfrans_utils.py` | Physics preprocessing (areas, BC masks, wall normals) |
 | `src/navier_stokes_physics_loss.py` | RANS physics loss with curriculum scheduling |

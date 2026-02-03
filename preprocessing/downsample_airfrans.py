@@ -111,34 +111,43 @@ def adapt_voxel(d: Data, tmin: int, tmax: int, frac: float, iters: int) -> Data:
     return best if best is not None else d
 
 
-def main():
+def _parse_args() -> 'DownsampleConfig':
+    from preprocessing.config import DownsampleConfig
+    defaults = DownsampleConfig()
     ap = argparse.ArgumentParser(description='Downsample AirfRANS graphs (no edges).')
-    ap.add_argument('--root', type=str, required=True)
-    ap.add_argument('--task', type=str, default='scarce', choices=['scarce', 'full'])
-    ap.add_argument('--out-dir', type=str, default='downsampled_graphs')
-    ap.add_argument('--limit-train', type=int, default=None)
-    ap.add_argument('--limit-test', type=int, default=None)
-    # Notebook-equivalent defaults
-    ap.add_argument('--target-min-nodes', type=int, default=15000)
-    ap.add_argument('--target-max-nodes', type=int, default=30000)
-    ap.add_argument('--voxel-frac', type=float, default=0.01)
-    ap.add_argument('--voxel-iters', type=int, default=5)
+    ap.add_argument('--root', type=str, default=defaults.root)
+    ap.add_argument('--task', type=str, default=defaults.task, choices=['scarce', 'full'])
+    ap.add_argument('--out-dir', type=str, default=defaults.out_dir)
+    ap.add_argument('--limit-train', type=int, default=defaults.limit_train)
+    ap.add_argument('--limit-test', type=int, default=defaults.limit_test)
+    ap.add_argument('--target-min-nodes', type=int, default=defaults.target_min_nodes)
+    ap.add_argument('--target-max-nodes', type=int, default=defaults.target_max_nodes)
+    ap.add_argument('--voxel-frac', type=float, default=defaults.voxel_frac)
+    ap.add_argument('--voxel-iters', type=int, default=defaults.voxel_iters)
     args = ap.parse_args()
+    return DownsampleConfig(
+        root=args.root, task=args.task, out_dir=args.out_dir,
+        limit_train=args.limit_train, limit_test=args.limit_test,
+        target_min_nodes=args.target_min_nodes, target_max_nodes=args.target_max_nodes,
+        voxel_frac=args.voxel_frac, voxel_iters=args.voxel_iters,
+    )
 
+
+def run(cfg: 'DownsampleConfig'):
     init_params = inspect.signature(AirfRANS.__init__).parameters
-    task_kwargs = {'task': args.task} if 'task' in init_params else {}
+    task_kwargs = {'task': cfg.task} if 'task' in init_params else {}
 
-    ds_train = AirfRANS(root=args.root, train=True, **task_kwargs)
-    ds_test = AirfRANS(root=args.root, train=False, **task_kwargs)
+    ds_train = AirfRANS(root=cfg.root, train=True, **task_kwargs)
+    ds_test = AirfRANS(root=cfg.root, train=False, **task_kwargs)
 
-    if args.limit_train is not None:
+    if cfg.limit_train is not None:
         from torch.utils.data import Subset
-        ds_train = Subset(ds_train, list(range(min(args.limit_train, len(ds_train)))))
-    if args.limit_test is not None:
+        ds_train = Subset(ds_train, list(range(min(cfg.limit_train, len(ds_train)))))
+    if cfg.limit_test is not None:
         from torch.utils.data import Subset
-        ds_test = Subset(ds_test, list(range(min(args.limit_test, len(ds_test)))))
+        ds_test = Subset(ds_test, list(range(min(cfg.limit_test, len(ds_test)))))
 
-    out_root = os.path.join(args.out_dir, args.task)
+    out_root = os.path.join(cfg.out_dir, cfg.task)
     out_train = os.path.join(out_root, 'train')
     out_test = os.path.join(out_root, 'test')
     os.makedirs(out_train, exist_ok=True)
@@ -149,7 +158,7 @@ def main():
         for i in tqdm(range(len(ds)), desc=f'Downsample -> {out_dir}'):
             d = ds[i]
             d2 = Data(**{k: v for k, v in d})
-            d2 = adapt_voxel(d2, args.target_min_nodes, args.target_max_nodes, args.voxel_frac, args.voxel_iters)
+            d2 = adapt_voxel(d2, cfg.target_min_nodes, cfg.target_max_nodes, cfg.voxel_frac, cfg.voxel_iters)
             # Save minimal fields (no edges yet)
             keep = {}
             for k, v in d2.to_dict().items():
@@ -164,6 +173,10 @@ def main():
     n_tr = _run_split(ds_train, out_train)
     n_te = _run_split(ds_test, out_test)
     print(f'Saved downsampled: train={n_tr} test={n_te} under {out_root}')
+
+
+def main():
+    run(_parse_args())
 
 
 if __name__ == '__main__':

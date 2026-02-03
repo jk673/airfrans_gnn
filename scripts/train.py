@@ -13,15 +13,11 @@ import os
 import sys
 import math
 import gc
-import contextlib
 from dataclasses import asdict
 from datetime import datetime
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.cuda.amp import GradScaler, autocast
 from torch_geometric.data import Data
 from matplotlib.tri import Triangulation
 from matplotlib.path import Path
@@ -32,9 +28,9 @@ import wandb
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.training_common import (
-    SmokeCfg, StandardScaler, DataBundle,
-    set_seed, get_lr, collate_pyg,
-    load_and_prepare_data, compute_loss_with_physics,
+    SmokeCfg, DataBundle,
+    set_seed, get_lr,
+    load_and_prepare_data,
     run_epoch, train_epoch, create_lr_scheduler, init_wandb,
 )
 from src.navier_stokes_physics_loss import NavierStokesPhysicsLoss
@@ -47,8 +43,8 @@ from src.utils import get_surface_mask, with_pos2, ensure_edge_features
 # ---------------------------------------------------------------------------
 
 def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
-                         scfg, device, scaler, physics_loss_fn, data_bundle):
-    scaler = GradScaler(enabled=(scfg.amp and torch.cuda.is_available()))
+                         scfg, device, physics_loss_fn):
+    scaler = torch.amp.GradScaler('cuda', enabled=(scfg.amp and torch.cuda.is_available()))  # type: ignore[attr-defined]
     global_step = 0
     best_val = float('inf')
 
@@ -137,7 +133,8 @@ def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
                         metadata={"epoch": epoch, "val_loss": val_total, "train_loss": train_total, "best_val": best_val},
                     )
                     art.add_file(best_path)
-                    wandb.run.log_artifact(art)
+                    if wandb.run is not None:
+                        wandb.run.log_artifact(art)
                     artifact_history['best_uploaded'] = True
                     artifact_history['total_artifacts'] += 1
                 except Exception as e:
@@ -164,7 +161,8 @@ def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
                             metadata={"epoch": epoch + 1, "val_loss": val_total, "train_loss": train_total},
                         )
                         art.add_file(ep_path)
-                        wandb.run.log_artifact(art, aliases=[f"epoch-{epoch + 1}"])
+                        if wandb.run is not None:
+                            wandb.run.log_artifact(art, aliases=[f"epoch-{epoch + 1}"])
                         artifact_history['last_periodic_epoch'] = epoch + 1
                         artifact_history['total_artifacts'] += 1
                     except Exception as e:
@@ -214,14 +212,15 @@ def mse_per_channel(y_pred: torch.Tensor, y_true: torch.Tensor, mask: torch.Tens
 
 @torch.no_grad()
 def _predict_one_local(d: Data, model, device, x_scaler, y_scaler, amp_enabled: bool = False):
-    dm = Data(**{k: v for k, v in d})
+    dm = d.clone()
+    assert dm.x is not None, 'x is None'
     if dm.x.size(1) == 5 or not getattr(dm, 'pos2_appended', False):
         dm = with_pos2(dm)
     assert hasattr(dm, 'edge_index') and dm.edge_index is not None, 'edge_index missing'
     dm = ensure_edge_features(dm, want_dim=5)
     dm.x_orig = dm.x
 
-    dm_norm = Data(**{k: v for k, v in dm})
+    dm_norm = dm.clone()
     dm_norm.x = dm.x
     dm_norm.y = dm.y
     dm_norm.x_orig = dm.x
@@ -229,8 +228,7 @@ def _predict_one_local(d: Data, model, device, x_scaler, y_scaler, amp_enabled: 
     dm_norm.y_norm_params = {'mean': y_scaler.mean.clone(), 'scale': y_scaler.std.clone()}
 
     dm_run = dm_norm.to(device)
-    with (torch.amp.autocast(device_type='cuda', enabled=(amp_enabled and torch.cuda.is_available()))
-          if torch.cuda.is_available() else contextlib.nullcontext()):
+    with torch.autocast(device_type='cuda', enabled=(amp_enabled and torch.cuda.is_available())):
         y_pred_norm = model(dm_run).detach().cpu()
     return dm_norm, y_pred_norm
 
@@ -255,6 +253,7 @@ def evaluate_model(model, device, data_bundle: DataBundle, scfg):
     dm_eval_norm, y_pred_eval_norm = _predict_one_local(d_orig, model, device, x_scaler, y_scaler, scfg.amp)
     surf_mask, vol_mask = _surface_volume_masks_from_orig(d_orig)
 
+    assert isinstance(dm_eval_norm.y, torch.Tensor), 'y must be a Tensor'
     names = ['u', 'v', 'p_over_rho', 'nu_t']
     mse_all = mse_per_channel(y_pred_eval_norm, dm_eval_norm.y, None)
     mse_surf = mse_per_channel(y_pred_eval_norm, dm_eval_norm.y, surf_mask)
@@ -271,20 +270,21 @@ def evaluate_model(model, device, data_bundle: DataBundle, scfg):
 
 @torch.no_grad()
 def _predict_one_for_viz(d: Data, model, device, x_scaler, y_scaler):
-    dm = Data(**{k: v for k, v in d})
+    dm = d.clone()
+    assert dm.x is not None, 'x is None'
     if dm.x.size(1) == 5 or not getattr(dm, 'pos2_appended', False):
         dm = with_pos2(dm)
     assert hasattr(dm, 'edge_index') and dm.edge_index is not None, 'edge_index missing'
     dm = ensure_edge_features(dm, want_dim=5)
-    dm_norm = Data(**{k: v for k, v in dm})
+    dm_norm = dm.clone()
     dm_norm.x = x_scaler.transform(dm.x)
     dm_norm.y = y_scaler.transform(dm.y)
     dm_run = dm_norm.to(device)
 
     model.eval()
-    if hasattr(dm_run, 'x'):
+    if dm_run.x is not None:
         dm_run.x = dm_run.x.float()
-    if hasattr(dm_run, 'edge_attr'):
+    if dm_run.edge_attr is not None:
         dm_run.edge_attr = dm_run.edge_attr.float()
 
     y_pred_norm = model(dm_run).detach().cpu()
@@ -297,14 +297,17 @@ def plot_pred_vs_gt(dm: Data, y_pred: torch.Tensor, y_scaler, x_scaler,
                     titles: tuple = ('Ground Truth', 'Prediction', 'Abs Error'),
                     cmap: str = 'viridis', denormalize: bool = True,
                     save_dir: str = "figures", save: bool = True):
-    if denormalize and hasattr(dm, 'y'):
+    assert isinstance(dm.y, torch.Tensor), 'dm.y must be a Tensor'
+    assert isinstance(dm.x, torch.Tensor), 'dm.x must be a Tensor'
+    if denormalize:
         gt = y_scaler.inverse(dm.y.detach().cpu())
         pr = y_scaler.inverse(y_pred.detach().cpu())
     else:
         gt = dm.y.detach().cpu()
         pr = y_pred.detach().cpu()
 
-    xy = (dm.pos if hasattr(dm, 'pos') and dm.pos is not None else dm.x)[:, :2].detach().cpu().float().numpy()
+    pos_src = dm.pos if dm.pos is not None else dm.x
+    xy = pos_src[:, :2].detach().cpu().float().numpy()
     tri = Triangulation(xy[:, 0], xy[:, 1])
 
     dm_x_cpu = dm.x.detach().cpu()
@@ -323,7 +326,9 @@ def plot_pred_vs_gt(dm: Data, y_pred: torch.Tensor, y_scaler, x_scaler,
     if mask_airfoil:
         try:
             x_np = x_phys.detach().cpu().numpy()
-            pos_np = (dm.pos if hasattr(dm, 'pos') and dm.pos is not None else dm.x)[:, :2].detach().cpu().numpy()
+            pos_src2 = dm.pos if dm.pos is not None else dm.x
+            assert isinstance(pos_src2, torch.Tensor)
+            pos_np = pos_src2[:, :2].detach().cpu().numpy()
             surf_mask = None
             wall = x_np[:, 2] if x_np.shape[1] >= 3 else None
             nxy = x_np[:, 3:5] if x_np.shape[1] >= 5 else None
@@ -379,12 +384,14 @@ def plot_pred_vs_gt(dm: Data, y_pred: torch.Tensor, y_scaler, x_scaler,
 
 @torch.no_grad()
 def plot_surface_pressure(d: Data, model, device, x_scaler, y_scaler, amp_enabled: bool = False):
+    assert isinstance(d.x, torch.Tensor), 'd.x must be a Tensor'
     dm_norm, y_pred_norm = _predict_one_local(d, model, device, x_scaler, y_scaler, amp_enabled)
+    assert isinstance(dm_norm.y, torch.Tensor), 'dm_norm.y must be a Tensor'
     y_pred_denorm = y_scaler.inverse(y_pred_norm.cpu())
     y_true_denorm = y_scaler.inverse(dm_norm.y.cpu())
 
     xvars = d.x.cpu()
-    pos = d.pos.cpu() if d.pos is not None else d.x[:, :2].cpu()
+    pos = d.pos.cpu() if isinstance(d.pos, torch.Tensor) else d.x[:, :2].cpu()
 
     normals = xvars[:, 3:5]
     surf_mask = (normals.abs().sum(dim=1) > 0)
@@ -403,7 +410,7 @@ def plot_surface_pressure(d: Data, model, device, x_scaler, y_scaler, amp_enable
     p_pred = torch.index_select(y_pred_denorm, 0, surf_idx)[:, 2]
     p_pred_ordered = p_pred[ord_idx]
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    _, ax = plt.subplots(figsize=(12, 6))
     ax.plot(ordered_pos[:, 0], p_true_ordered, 'o-', label='Ground Truth Pressure', markersize=4)
     ax.plot(ordered_pos[:, 0], p_pred_ordered, 'x-', label='Predicted Pressure', markersize=4)
     ax.set_xlabel('X-coordinate')
@@ -411,7 +418,7 @@ def plot_surface_pressure(d: Data, model, device, x_scaler, y_scaler, amp_enable
     ax.set_title('Surface Pressure Distribution')
     ax.legend()
     ax.grid(True)
-    plt.gca().invert_yaxis()
+    ax.invert_yaxis()
     plt.show()
 
 
@@ -555,10 +562,10 @@ def main():
     init_wandb(scfg, loss_fn)
 
     # --- Train ---
-    history = train_with_scheduler(
+    train_with_scheduler(
         model, optimizer, lr_scheduler,
         data_bundle.train_loader, data_bundle.val_loader,
-        scfg, device, None, loss_fn, data_bundle,
+        scfg, device, loss_fn,
     )
 
     # --- Evaluate ---

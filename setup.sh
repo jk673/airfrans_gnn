@@ -10,19 +10,20 @@
 # ─────────────────────────────────────────────────────
 set -euo pipefail
 
-EXTRAS=""
+EXTRAS="optuna"
 for arg in "$@"; do
     case "$arg" in
         --all)    EXTRAS="all" ;;
         --optuna) EXTRAS="optuna" ;;
         --test)   EXTRAS="test" ;;
+        --core)   EXTRAS="" ;;
         --help|-h)
-            echo "Usage: bash setup.sh [--all|--optuna|--test]"
+            echo "Usage: bash setup.sh [--all|--optuna|--test|--core]"
             exit 0
             ;;
         *)
             echo "Unknown option: $arg"
-            echo "Usage: bash setup.sh [--all|--optuna|--test]"
+            echo "Usage: bash setup.sh [--all|--optuna|--test|--core]"
             exit 1
             ;;
     esac
@@ -38,15 +39,15 @@ echo ">> uv $(uv --version)"
 
 # ── 2. Install dependencies ──────────────────────────
 if [ -n "$EXTRAS" ]; then
-    echo ">> Installing with extras: [$EXTRAS]"
+    echo ">> Installing with extras: [$EXTRAS] (default: optuna)"
     uv sync --extra "$EXTRAS"
 else
-    echo ">> Installing core dependencies"
+    echo ">> Installing core dependencies only (selected via --core)"
     uv sync
 fi
 
 # ── 3. Verify key imports ────────────────────────────
-echo ""
+echo "" 
 echo ">> Verifying installation ..."
 uv run python -c "
 import torch
@@ -57,6 +58,8 @@ import torch_scatter
 print(f'  torch-scatter   OK')
 import torch_sparse
 print(f'  torch-sparse    OK')
+import torch_cluster
+print(f'  torch-cluster   OK')
 import numpy; print(f'  numpy          {numpy.__version__}')
 import scipy; print(f'  scipy          {scipy.__version__}')
 import matplotlib; print(f'  matplotlib     {matplotlib.__version__}')
