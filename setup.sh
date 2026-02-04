@@ -70,3 +70,8 @@ print('  All core packages imported successfully.')
 
 echo ""
 echo ">> Setup complete. Run notebooks with:  uv run jupyter notebook"
+
+# ── 4. Register Jupyter kernel ───────────────────────
+echo ""
+echo ">> Installing Jupyter kernel 'AirfRANS GNN' ..."
+uv run python -m ipykernel install --user --name airfrans-gnn --display-name "AirfRANS GNN"

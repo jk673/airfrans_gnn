@@ -1,9 +1,10 @@
-# ── Core: PyTorch (CUDA 12.8) ──────────────────────────────────
---extra-index-url https://download.pytorch.org/whl/cu128
-torch
-torch-scatter
-torch-sparse
-torch-cluster
+# ── Core: PyTorch (CUDA 12.4) ──────────────────────────────────
+--extra-index-url https://download.pytorch.org/whl/cu124
+--find-links https://data.pyg.org/whl/torch-2.4.0+cu124.html
+torch==2.4.0
+torch-scatter==2.1.2
+torch-sparse==0.6.18
+torch-cluster==1.6.3
 torch-geometric==2.7.0
 
 # ── Scientific / Numerical ─────────────────────────────────────
@@ -16,6 +17,7 @@ tqdm
 psutil
 wandb
 ipykernel
+notebook
 
 # ── Hyperparameter tuning ──────────────────────────────────────
 optuna

@@ -10,7 +10,7 @@ AirfRANS GNN is a physics-informed Graph Neural Network framework for aerodynami
 
 ```bash
 # Python 3.11 required
-uv sync   # uses pyproject.toml with PyTorch CUDA 12.8 index
+uv sync   # uses pyproject.toml with PyTorch CUDA 12.4 index and prebuilt PyG wheels
 ```
 
 Key dependencies: PyTorch, PyTorch Geometric, torch-scatter, torch-sparse, wandb, scipy.
