@@ -992,5 +992,800 @@ class NavierStokesPhysicsLoss(nn.Module):
         return losses
 
 
+# ============================================================
+# UnifiedNavierStokesPhysicsLoss
+# Surface/Volume separation + FV area-weighted operators
+# + variable-coefficient diffusion + dynamic scaling
+# ============================================================
+
+class UnifiedNavierStokesPhysicsLoss(nn.Module):
+    """
+    Unified Navier-Stokes physics loss with surface/volume separation,
+    improved FV numerical operators, dynamic weight scaling, and
+    denormalization support.
+
+    Features:
+    - Surface/Volume separated data loss
+    - Finite-volume area-weighted operators with automatic sanity checks
+    - Variable-coefficient diffusion (nu_eff per edge)
+    - Upwind convection
+    - Integrated pressure force (FV-style)
+    - sklearn scaler support (register_buffer for mean/std)
+    - Boundary loss (wall no-slip + inlet velocity)
+    - Auto pressure mode selection (grad vs FV)
+    """
+
+    def __init__(
+        self,
+        data_weight: float = 1.0,
+        continuity_weight: float = 0.1,
+        momentum_weight: float = 0.01,
+        boundary_weight: float = 1.0,
+        nu: float = 1.56e-5,
+        rho: float = 1.225,
+        use_area_weighting: bool = True,
+        use_dynamic_scaling: bool = False,
+        x_scaler: Optional[Any] = None,
+        y_scaler: Optional[Any] = None,
+
+        debug_print: bool = True,
+        debug_every: int = 1,
+        debug_max_steps: int = 50,
+        pressure_is_p_over_rho: bool = True,
+        U_ref: float = 1.0,
+        L_ref: float = 1.0,
+    ):
+        super().__init__()
+        self.data_weight = data_weight
+        self.continuity_weight = continuity_weight
+        self.momentum_weight = momentum_weight
+        self.boundary_weight = boundary_weight
+        self.nu = nu
+        self.rho = rho
+        self.use_area_weighting = use_area_weighting
+        self.use_dynamic_scaling = use_dynamic_scaling
+        self.x_scaler = x_scaler
+        self.y_scaler = y_scaler
+
+        # Register scaler buffers (sklearn: mean_/scale_, custom: mean/std)
+        def _maybe_register_scaler(prefix, scaler):
+            if scaler is None:
+                return
+            mean = getattr(scaler, "mean_", None)
+            std  = getattr(scaler, "scale_", None)
+            if mean is None: mean = getattr(scaler, "mean", None)
+            if std  is None: std  = getattr(scaler, "std",  None)
+            if (mean is not None) and (std is not None):
+                self.register_buffer(f"_{prefix}_mean", torch.as_tensor(mean, dtype=torch.float32))
+                self.register_buffer(f"_{prefix}_std",  torch.as_tensor(std,  dtype=torch.float32))
+        _maybe_register_scaler("x", x_scaler)
+        _maybe_register_scaler("y", y_scaler)
+
+        self.debug_print = debug_print
+        self.debug_every = int(debug_every)
+        self.debug_max_steps = int(debug_max_steps)
+        self.pressure_is_p_over_rho = bool(pressure_is_p_over_rho)
+        self.U_ref = float(U_ref)
+        self.L_ref = float(L_ref)
+
+        # Pressure discretization mode: 'auto'|'fv'|'grad'
+        if not hasattr(self, "pressure_mode"):
+            self.pressure_mode = "auto"
+
+        # Dynamic scaling parameters
+        self.register_buffer('data_scale', torch.tensor(1.0))
+        self.register_buffer('physics_scale', torch.tensor(1.0))
+
+        # Debug step counter
+        if not hasattr(self, '_dbg_step'):
+            self.register_buffer('_dbg_step', torch.tensor(0, dtype=torch.long))
+
+    def forward(
+        self,
+        pred: torch.Tensor,
+        batch: Any,
+        model: Optional[nn.Module] = None
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Main loss computation.
+
+        Args:
+            pred: predictions [N, output_dim]
+            batch: batch data (PyG Data/Batch)
+            model: model (optional)
+
+        Returns:
+            Loss dictionary
+        """
+        device = pred.device
+
+        # 1. Denormalize if needed
+        if self.y_scaler is not None:
+            pred_denorm = self._denormalize_y(pred)
+            target_denorm = self._denormalize_y(batch.y)
+        else:
+            pred_denorm = pred
+            target_denorm = batch.y
+
+        # 2. Surface/Volume separation
+        surface_mask, volume_mask = self._get_surface_volume_masks(batch, device)
+
+        # 3. Data Loss
+        data_losses = self._compute_data_loss(
+            pred, batch.y, surface_mask, volume_mask
+        )
+
+        # 4. Physics Loss
+        physics_losses = self._compute_physics_loss(
+            pred_denorm, batch, device, target_denorm
+        )
+
+        # 5. Boundary Loss
+        boundary_loss = self._compute_boundary_loss(
+            pred_denorm, batch, device
+        )
+
+        # 6. Total Loss
+        total_loss = (
+            self.data_weight * data_losses['total'] +
+            self.continuity_weight * physics_losses['continuity'] +
+            self.momentum_weight * physics_losses['momentum'] +
+            self.boundary_weight * boundary_loss
+        )
+
+        return {
+            'total': total_loss,
+            'data_surface': data_losses['surface'],
+            'data_volume': data_losses['volume'],
+            'data_total': data_losses['total'],
+            'continuity': physics_losses['continuity'],
+            'momentum': physics_losses['momentum'],
+            'boundary': boundary_loss
+        }
+
+    def _get_surface_volume_masks(
+        self,
+        batch: Any,
+        device: torch.device
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Surface/Volume separation using wall mask or normal vectors."""
+        # 1) Prefer explicit wall mask
+        if hasattr(batch, 'is_wall') and isinstance(batch.is_wall, torch.Tensor):
+            surface_mask = batch.is_wall.to(device=device, dtype=torch.bool).view(-1)
+            volume_mask = ~surface_mask
+            return surface_mask, volume_mask
+
+        # 2) Fallback to normals from x
+        if self.x_scaler is not None:
+            x_denorm = self._denormalize_x(batch.x)
+            normal_x = x_denorm[:, 3]
+            normal_y = x_denorm[:, 4]
+        else:
+            normal_x = batch.x[:, 3]
+            normal_y = batch.x[:, 4]
+
+        normal_magnitude = torch.sqrt(normal_x**2 + normal_y**2)
+        surface_mask = normal_magnitude > 1e-10
+        volume_mask = ~surface_mask
+        return surface_mask, volume_mask
+
+    def _compute_data_loss(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        surface_mask: torch.Tensor,
+        volume_mask: torch.Tensor
+    ) -> Dict[str, torch.Tensor]:
+        """Surface and volume separated data loss."""
+        if target.dim() == 1:
+            target = target.unsqueeze(-1)
+        C_pred = pred.size(1)
+        if target.size(1) != C_pred:
+            if target.size(1) > C_pred:
+                target = target[:, :C_pred]
+            else:
+                pred = pred[:, : target.size(1)]
+                C_pred = pred.size(1)
+
+        if surface_mask.any():
+            surface_loss = F.mse_loss(pred[surface_mask], target[surface_mask])
+        else:
+            surface_loss = torch.tensor(0.0, device=pred.device)
+
+        if volume_mask.any():
+            volume_loss = F.mse_loss(pred[volume_mask], target[volume_mask])
+        else:
+            volume_loss = torch.tensor(0.0, device=pred.device)
+
+        total_data_loss = surface_loss + volume_loss
+
+        return {
+            'surface': surface_loss,
+            'volume': volume_loss,
+            'total': total_data_loss
+        }
+
+    def _compute_physics_loss(
+        self,
+        pred: torch.Tensor,
+        batch: Any,
+        device: torch.device,
+        target_denorm: Optional[torch.Tensor] = None
+    ) -> Dict[str, torch.Tensor]:
+        """Physics-based loss computation."""
+        velocity = pred[:, :2]
+        pressure = pred[:, 2:3]
+
+        node_area = getattr(batch, 'node_area', None)
+
+        # Pick physics-compatible edge attributes
+        if hasattr(batch, 'edge_attr_phys') and isinstance(batch.edge_attr_phys, torch.Tensor):
+            edge_attr_phys = batch.edge_attr_phys
+        elif hasattr(batch, 'edge_attr_dxdy') and isinstance(batch.edge_attr_dxdy, torch.Tensor):
+            edge_attr_phys = batch.edge_attr_dxdy[:, :3]
+        elif hasattr(batch, 'edge_attr') and isinstance(batch.edge_attr, torch.Tensor):
+            edge_attr_phys = batch.edge_attr[:, :3] if batch.edge_attr.size(1) >= 3 else batch.edge_attr
+        else:
+            raise ValueError("Physics edge attributes not found: need edge_attr_phys or edge_attr with >=3 columns")
+
+        surface_mask, volume_mask = self._get_surface_volume_masks(batch, device)
+        has_volume = bool(volume_mask is not None and volume_mask.any())
+
+        # Area ops sanity check
+        area_ops, area_r = self._area_ops_enabled(batch.edge_index, edge_attr_phys, batch.num_nodes, node_area)
+
+        # Continuity loss
+        divergence = self._compute_divergence(
+            velocity, batch.edge_index, edge_attr_phys, batch.num_nodes, node_area, area_ops=area_ops
+        )
+
+        U_ref = self._infer_U_ref(batch)
+        self.U_ref = U_ref
+
+        # Non-dimensionalize continuity
+        if area_ops:
+            ell_c = torch.sqrt(node_area.clamp_min(1e-12))
+        else:
+            ell_c = self._node_length_scale(batch.edge_index, edge_attr_phys, batch.num_nodes)
+
+        cont_nd = divergence * (ell_c / U_ref)
+
+        if has_volume:
+            continuity_loss = torch.mean(cont_nd[volume_mask]**2)
+        else:
+            continuity_loss = torch.mean(cont_nd**2)
+
+        # Effective viscosity
+        nu_t = None
+        if target_denorm is not None and target_denorm.shape[1] >= 4:
+            nu_t = target_denorm[:, 3:4]
+        elif hasattr(batch, 'y') and isinstance(batch.y, torch.Tensor) and batch.y.shape[1] >= 4 and self.y_scaler is None:
+            nu_t = batch.y[:, 3:4]
+        if nu_t is None:
+            nu_t = torch.zeros_like(pressure)
+        if nu_t.dim() == 1:
+            nu_t = nu_t.view(-1, 1)
+        nu_eff = (float(self.nu) if self.nu is not None else 0.0) + torch.relu(nu_t)
+
+        # Momentum loss
+        momentum_residual = self._compute_momentum_residual(
+            velocity, pressure, batch.edge_index,
+            edge_attr=edge_attr_phys,
+            num_nodes=batch.num_nodes,
+            node_area=node_area,
+            nu_eff=nu_eff
+        )
+
+        # Non-dimensionalize momentum
+        ell = self._node_length_scale(batch.edge_index, edge_attr_phys, batch.num_nodes)
+        ref_accel = (U_ref * U_ref) / ell
+        momentum_residual = momentum_residual / ref_accel.unsqueeze(-1)
+
+        if has_volume:
+            momentum_loss = torch.mean(torch.sum(momentum_residual[volume_mask]**2, dim=1))
+        else:
+            momentum_loss = torch.mean(torch.sum(momentum_residual**2, dim=1))
+
+        # Debug dump
+        if (self._dbg_step.item() < self.debug_max_steps) and (self._dbg_step.item() % self.debug_every == 0):
+            def _area_ok():
+                if (not self.use_area_weighting) or (node_area is None):
+                    return False
+                ell_loc = self._node_length_scale(batch.edge_index, edge_attr_phys, batch.num_nodes)
+                r = torch.median(node_area.clamp_min(1e-12)) / torch.median((ell_loc * ell_loc).clamp_min(1e-12))
+                return (r > 0.2) and (r < 5.0)
+            use_fv_dbg = (self.pressure_mode == "fv") or (
+                self.pressure_mode == "auto" and _area_ok()
+            )
+            self._debug_dump_momentum_terms(
+                velocity, pressure,
+                batch.edge_index, edge_attr_phys, batch.num_nodes,
+                nu_eff=nu_eff, node_area=node_area,
+                use_fv_pressure=use_fv_dbg,
+                volume_mask=volume_mask,
+                area_ops=area_ops,
+                area_r=area_r
+            )
+        self._dbg_step += 1
+
+        return {
+            'continuity': continuity_loss,
+            'momentum': momentum_loss
+        }
+
+    def _area_ops_enabled(self, edge_index, edge_attr, num_nodes, node_area) -> Tuple[bool, torch.Tensor]:
+        """Check if FV area-weighted ops should be used. Returns (enabled, r=median(area)/median(ell^2))."""
+        if (not self.use_area_weighting) or (node_area is None):
+            return False, torch.tensor(float('nan'), device=edge_attr.device)
+        ell = self._node_length_scale(edge_index, edge_attr, num_nodes)
+        r = torch.median(node_area.clamp_min(1e-12)) / torch.median((ell * ell).clamp_min(1e-12))
+        ok = (r > 0.2) and (r < 5.0)
+        return bool(ok), r
+
+    def _compute_divergence(
+        self,
+        velocity: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        num_nodes: int,
+        node_area: Optional[torch.Tensor] = None,
+        area_ops: bool = False
+    ) -> torch.Tensor:
+        """Conservative divergence with optional area weighting."""
+        device = velocity.device
+        eps = 1e-10
+
+        dx = edge_attr[:, 0]
+        dy = edge_attr[:, 1]
+        dist = self._safe_dist(edge_attr) + eps
+
+        i, j = edge_index
+        u_edge = 0.5 * (velocity[i, 0] + velocity[j, 0])
+        v_edge = 0.5 * (velocity[i, 1] + velocity[j, 1])
+
+        if area_ops:
+            flux = (u_edge * dy - v_edge * dx)
+        else:
+            flux = (u_edge * dy - v_edge * dx) / dist
+
+        div = scatter_add(flux, i, dim=0, dim_size=num_nodes)
+
+        degree = scatter_add(
+            torch.ones_like(flux), i, dim=0, dim_size=num_nodes
+        ).clamp(min=1.0)
+
+        if area_ops:
+            area_safe = node_area.clamp(min=eps)
+            div = div / area_safe
+        else:
+            div = div / degree
+
+        return div
+
+    def _compute_momentum_residual(
+        self,
+        velocity: torch.Tensor,
+        pressure: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        num_nodes: int,
+        node_area: Optional[torch.Tensor] = None,
+        area_ops: bool = False,
+        nu_eff: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """Momentum equation residual."""
+        device = velocity.device
+
+        # 1. Convection
+        convection = self._compute_convection(
+            velocity, edge_index, edge_attr, num_nodes, node_area, area_ops=area_ops
+        )
+
+        # 2. Pressure term selection (auto: area check + ND sanity)
+        def _area_looks_ok() -> bool:
+            if (not self.use_area_weighting) or (node_area is None):
+                return False
+            ell_loc = self._node_length_scale(edge_index, edge_attr, num_nodes)
+            r = torch.median(node_area.clamp_min(1e-12)) / torch.median((ell_loc * ell_loc).clamp_min(1e-12))
+            return (r > 0.2) and (r < 5.0)
+
+        p_grad = self._compute_gradient(pressure, edge_index, edge_attr, num_nodes)
+        if not self.pressure_is_p_over_rho:
+            p_grad = p_grad / self.rho
+        p_fv = None
+        if self.use_area_weighting and (node_area is not None):
+            p_fv = self._compute_pressure_force(pressure, edge_index, edge_attr, num_nodes, node_area)
+            if not self.pressure_is_p_over_rho:
+                p_fv = p_fv / self.rho
+
+        if self.pressure_mode == "grad" or (self.pressure_mode == "auto" and not _area_looks_ok()):
+            pressure_term = p_grad
+        elif self.pressure_mode == "fv":
+            pressure_term = p_fv
+        else:
+            ell_loc = self._node_length_scale(edge_index, edge_attr, num_nodes)
+            ref_acc = (self.U_ref * self.U_ref) / ell_loc.clamp_min(1e-8)
+            rms_grad = (p_grad / ref_acc.unsqueeze(-1)).norm(dim=1).mean()
+            rms_fv   = (p_fv   / ref_acc.unsqueeze(-1)).norm(dim=1).mean()
+            pressure_term = p_fv if (rms_fv >= 0.1 * rms_grad) else p_grad
+
+        # 3. Viscous term: variable-coefficient diffusion
+        if nu_eff is not None:
+            viscous = self._compute_variable_diffusion(
+                velocity, edge_index, edge_attr, num_nodes, nu_eff, node_area=node_area, area_ops=area_ops
+            )
+        else:
+            viscous = self.nu * self._compute_laplacian(
+                velocity, edge_index, edge_attr, num_nodes, node_area, area_ops=area_ops
+            )
+
+        residual = convection + pressure_term - viscous
+        return residual
+
+    def _compute_pressure_force(
+        self,
+        pressure: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        num_nodes: int,
+        node_area: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """Integrated pressure force: (sum_e p_e * n_e * |e|) / area_i (FV-style)."""
+        eps = 1e-10
+        i, j = edge_index
+        dx = edge_attr[:, 0]
+        dy = edge_attr[:, 1]
+        dist = self._safe_dist(edge_attr) + eps
+
+        nx =  dy / dist
+        ny = -dx / dist
+        p_e = 0.5 * (pressure[i, 0] + pressure[j, 0])
+        fx_e = p_e * nx * dist
+        fy_e = p_e * ny * dist
+        fx = scatter_add(fx_e, i, dim=0, dim_size=num_nodes)
+        fy = scatter_add(fy_e, i, dim=0, dim_size=num_nodes)
+        F_vec = torch.stack([fx, fy], dim=1)
+        if self.use_area_weighting and (node_area is not None):
+            area = node_area.clamp_min(1e-12).unsqueeze(-1)
+            F_vec = F_vec / area
+        else:
+            deg = scatter_add(torch.ones_like(fx_e), i, dim=0, dim_size=num_nodes).clamp_min(1.0).unsqueeze(-1)
+            F_vec = F_vec / deg
+        return F_vec
+
+    def _compute_variable_diffusion(
+        self,
+        field: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        num_nodes: int,
+        nu_eff: Optional[torch.Tensor],
+        node_area: Optional[torch.Tensor] = None,
+        area_ops: bool = False,
+        eps: float = 1e-10
+    ) -> torch.Tensor:
+        """Compute div(nu_eff * grad(field)) using edge-averaged viscosity."""
+        device = field.device
+        i, j = edge_index
+        dist = self._safe_dist(edge_attr) + eps
+        inv_r  = 1.0 / dist
+        inv_r2 = inv_r * inv_r
+
+        if nu_eff is None:
+            nu_e = torch.zeros(edge_index.shape[1], 1, device=device, dtype=field.dtype)
+        else:
+            if nu_eff.dim() == 1:
+                nu_e = 0.5 * (nu_eff[i].unsqueeze(-1) + nu_eff[j].unsqueeze(-1))
+            else:
+                nu_e = 0.5 * (nu_eff[i] + nu_eff[j])
+        df = (field[j] - field[i])
+        w = inv_r if area_ops else inv_r2
+        contrib = (nu_e * w.unsqueeze(-1)) * df
+
+        acc = scatter_add(contrib, i, dim=0, dim_size=num_nodes)
+
+        if area_ops:
+            area = node_area.clamp_min(1e-12).unsqueeze(-1)
+            acc = acc / area
+        else:
+            degree = scatter_add(
+                torch.ones((edge_index.shape[1],), device=device),
+                i, dim=0, dim_size=num_nodes
+            ).clamp(min=1.0).unsqueeze(-1)
+            acc = acc / degree
+
+        return acc
+
+    def _compute_boundary_loss(
+        self,
+        pred: torch.Tensor,
+        batch: Any,
+        device: torch.device,
+        use_normalized: bool = True
+    ) -> torch.Tensor:
+        """Boundary condition loss (wall no-slip + inlet velocity)."""
+        boundary_loss = torch.tensor(0.0, device=device)
+        debug_boundary = bool(getattr(batch, 'debug_boundary_scale', False))
+        if not hasattr(self, '_dbg_bc_count'):
+            self._dbg_bc_count = 0
+
+        # Wall boundary (no-slip)
+        wall_mask = None
+        if hasattr(batch, 'is_wall') and isinstance(batch.is_wall, torch.Tensor):
+            wall_mask = batch.is_wall.to(device=device, dtype=torch.bool).view(-1)
+        elif hasattr(batch, 'wall_mask') and isinstance(batch.wall_mask, torch.Tensor):
+            wall_mask = batch.wall_mask.to(device=device, dtype=torch.bool).view(-1)
+        if wall_mask is not None and wall_mask.any():
+            wall_velocity = pred[wall_mask, :2]
+            if debug_boundary or self._dbg_bc_count < 3:
+                try:
+                    wall_speed = torch.linalg.vector_norm(wall_velocity, dim=1)
+                    print(f"[BoundaryScale] wall: N={int(wall_speed.numel())} | |u| mean={float(wall_speed.mean().item()):.3f} max={float(wall_speed.max().item()):.3f}")
+                except Exception:
+                    pass
+            U = self.U_ref if hasattr(self, "U_ref") else torch.tensor(1.0, device=device)
+            wall_nd2 = (torch.linalg.vector_norm(wall_velocity, dim=1) / U.clamp_min(1e-8))**2
+            boundary_loss = boundary_loss + torch.mean(wall_nd2)
+
+        # Inlet boundary
+        inlet_mask = None
+        inlet_target = None
+        if hasattr(batch, 'is_inlet') and isinstance(batch.is_inlet, torch.Tensor):
+            inlet_mask = batch.is_inlet.to(device=device, dtype=torch.bool).view(-1)
+            if hasattr(batch, 'inlet_u') and isinstance(batch.inlet_u, torch.Tensor):
+                inlet_target = batch.inlet_u.to(device=device, dtype=pred.dtype)
+        elif hasattr(batch, 'inlet_mask') and hasattr(batch, 'inlet_velocity'):
+            inlet_mask = batch.inlet_mask.to(device=device, dtype=torch.bool).view(-1)
+            inlet_target = batch.inlet_velocity.to(device=device, dtype=pred.dtype)
+        if inlet_mask is not None and inlet_target is not None and inlet_mask.any():
+            inlet_velocity = pred[inlet_mask, :2]
+            inlet_target_masked = inlet_target[inlet_mask]
+            if debug_boundary or self._dbg_bc_count < 3:
+                try:
+                    sp = torch.linalg.vector_norm(inlet_velocity, dim=1)
+                    st = torch.linalg.vector_norm(inlet_target_masked, dim=1)
+                    mse = F.mse_loss(inlet_velocity, inlet_target_masked)
+                    print(
+                        f"[BoundaryScale] inlet: N={int(sp.numel())} | |u_pred| mean={float(sp.mean().item()):.3f} | |u_gt| mean={float(st.mean().item()):.3f} | MSE={float(mse.item()):.3f}"
+                    )
+                except Exception:
+                    pass
+            U = self.U_ref if hasattr(self, "U_ref") else torch.tensor(1.0, device=device)
+            bc_diff_nd = (inlet_velocity - inlet_target_masked) / U.clamp_min(1e-8)
+            boundary_loss = boundary_loss + torch.mean(torch.sum(bc_diff_nd**2, dim=1))
+
+        if not debug_boundary:
+            self._dbg_bc_count = min(self._dbg_bc_count + 1, 10)
+
+        return boundary_loss
+
+    def _compute_convection(
+        self,
+        velocity: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        num_nodes: int,
+        node_area: Optional[torch.Tensor] = None,
+        area_ops: bool = False
+    ) -> torch.Tensor:
+        """Convection term with FV or lightweight approximation."""
+        device = velocity.device
+        eps = 1e-10
+
+        i, j = edge_index
+        dx = edge_attr[:, 0]
+        dy = edge_attr[:, 1]
+        dist = self._safe_dist(edge_attr) + eps
+
+        if area_ops:
+            nx =  dy / dist
+            ny = -dx / dist
+            vn_i = velocity[i, 0] * nx + velocity[i, 1] * ny
+            take_i = (vn_i > 0).unsqueeze(-1)
+            v_up = torch.where(take_i, velocity[i], velocity[j])
+            vn_up = v_up[:, 0] * nx + v_up[:, 1] * ny
+            Fx_e = vn_up * v_up[:, 0] * dist
+            Fy_e = vn_up * v_up[:, 1] * dist
+            cx = scatter_add(Fx_e, i, dim=0, dim_size=num_nodes)
+            cy = scatter_add(Fy_e, i, dim=0, dim_size=num_nodes)
+            area = node_area.clamp_min(1e-12)
+            cx = cx / area
+            cy = cy / area
+            return torch.stack([cx, cy], dim=1)
+        else:
+            tnx = dx / dist
+            tny = dy / dist
+            vn_i = velocity[i, 0] * tnx + velocity[i, 1] * tny
+            v_up = torch.where(vn_i.unsqueeze(-1) > 0, velocity[i], velocity[j])
+            dv = velocity[j] - velocity[i]
+            conv_x = v_up[:, 0] * dv[:, 0] / dist
+            conv_y = v_up[:, 1] * dv[:, 1] / dist
+            cx = scatter_add(conv_x, i, dim=0, dim_size=num_nodes)
+            cy = scatter_add(conv_y, i, dim=0, dim_size=num_nodes)
+            deg = scatter_add(torch.ones_like(conv_x), i, dim=0, dim_size=num_nodes).clamp_min(1.0)
+            cx = cx / deg
+            cy = cy / deg
+            return torch.stack([cx, cy], dim=1)
+
+    def _compute_gradient(
+        self,
+        scalar: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        num_nodes: int
+    ) -> torch.Tensor:
+        """Gradient computation for scalar field."""
+        eps = 1e-10
+
+        i, j = edge_index
+        dx = edge_attr[:, 0]
+        dy = edge_attr[:, 1]
+        dist = self._safe_dist(edge_attr) + eps
+
+        ds = scalar[j] - scalar[i]
+
+        grad_x = ds.squeeze() * dx / (dist**2)
+        grad_y = ds.squeeze() * dy / (dist**2)
+
+        gradient_x = scatter_add(grad_x, i, dim=0, dim_size=num_nodes)
+        gradient_y = scatter_add(grad_y, i, dim=0, dim_size=num_nodes)
+
+        degree = scatter_add(
+            torch.ones_like(grad_x), i, dim=0, dim_size=num_nodes
+        ).clamp(min=1.0)
+
+        gradient_x = gradient_x / degree
+        gradient_y = gradient_y / degree
+
+        return torch.stack([gradient_x, gradient_y], dim=1)
+
+    def _compute_laplacian(
+        self,
+        field: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        num_nodes: int,
+        node_area: Optional[torch.Tensor] = None,
+        area_ops: bool = False
+    ) -> torch.Tensor:
+        """Laplacian computation for vector field."""
+        device = field.device
+        eps = 1e-10
+
+        i, j = edge_index
+        dist = self._safe_dist(edge_attr) + eps
+
+        df = field[j] - field[i]
+
+        if area_ops:
+            laplacian_contrib = 2 * df / dist.unsqueeze(-1)
+        else:
+            laplacian_contrib = 2 * df / (dist**2).unsqueeze(-1)
+
+        laplacian = scatter_add(
+             laplacian_contrib, i, dim=0, dim_size=num_nodes
+         )
+
+        if area_ops:
+            area = node_area.clamp_min(1e-12).unsqueeze(-1)
+            laplacian = laplacian / area
+        else:
+            degree = scatter_add(
+                torch.ones((edge_index.shape[1],), device=device),
+                i, dim=0, dim_size=num_nodes
+            ).clamp(min=1.0).unsqueeze(-1)
+            laplacian = laplacian / degree
+
+        return laplacian
+
+    def _denormalize_x(self, x: torch.Tensor) -> torch.Tensor:
+        """Input data denormalization (autograd-friendly)."""
+        if hasattr(self, "_x_mean") and hasattr(self, "_x_std"):
+            mean = self._x_mean.to(x.device); std = self._x_std.to(x.device)
+            return x * std + mean
+        return x
+
+    def _denormalize_y(self, y: torch.Tensor) -> torch.Tensor:
+        """Output data denormalization (autograd-friendly)."""
+        if hasattr(self, "_y_mean") and hasattr(self, "_y_std"):
+            mean = self._y_mean.to(y.device); std = self._y_std.to(y.device)
+            return y * std + mean
+        return y
+
+    def _infer_U_ref(self, batch) -> torch.Tensor:
+        """Dynamically infer reference velocity U_ref from batch data."""
+        if hasattr(self, "_x_mean") and hasattr(self, "_x_std"):
+            x_denorm = self._denormalize_x(batch.x)
+        elif hasattr(batch, "x_norm_params") and isinstance(batch.x_norm_params, dict):
+            xm = batch.x_norm_params.get("mean", None)
+            xs = batch.x_norm_params.get("scale", None)
+            if xm is not None and xs is not None:
+                mean = xm.to(batch.x.device)
+                std  = xs.to(batch.x.device)
+                x_denorm = batch.x * std + mean
+            else:
+                x_denorm = batch.x
+        else:
+            x_denorm = batch.x
+
+        u_all = x_denorm[:, 0]
+        v_all = x_denorm[:, 1]
+
+        mask = None
+        if hasattr(batch, 'is_farfield') and isinstance(batch.is_farfield, torch.Tensor) and batch.is_farfield.any():
+            mask = batch.is_farfield
+        elif hasattr(batch, 'is_inlet') and isinstance(batch.is_inlet, torch.Tensor) and batch.is_inlet.any():
+            mask = batch.is_inlet
+
+        if mask is not None:
+            u = u_all[mask]
+            v = v_all[mask]
+        else:
+            u = u_all
+            v = v_all
+
+        U_ref = torch.sqrt((u**2 + v**2).mean()).clamp_min(1e-6)
+        return U_ref
+
+    @torch.no_grad()
+    def _debug_dump_momentum_terms(self, velocity, pressure, edge_index, edge_attr, num_nodes,
+                                   nu_eff=None, node_area=None, use_fv_pressure=True, volume_mask=None,
+                                   area_ops: bool = False, area_r: Optional[torch.Tensor] = None):
+        """Debug helper to dump momentum term statistics."""
+        dist = edge_attr[:, 2].clamp_min(1e-12)
+        q = torch.quantile(dist, torch.tensor([0.0, 0.01, 0.10, 0.50], device=dist.device))
+        dmin, d01, d10, d50 = [float(x) for x in q]
+
+        conv = self._compute_convection(velocity, edge_index, edge_attr, num_nodes, node_area, area_ops=area_ops)
+        if use_fv_pressure:
+            pterm = self._compute_pressure_force(pressure, edge_index, edge_attr, num_nodes, node_area)
+            if not self.pressure_is_p_over_rho:
+                pterm = pterm / self.rho
+        else:
+            pterm = self._compute_gradient(pressure, edge_index, edge_attr, num_nodes)
+            if not self.pressure_is_p_over_rho:
+                pterm = pterm / self.rho
+        diff = ( self._compute_variable_diffusion(velocity, edge_index, edge_attr, num_nodes, nu_eff, node_area=node_area, area_ops=area_ops)
+                 if (nu_eff is not None) else
+                 self.nu * self._compute_laplacian(velocity, edge_index, edge_attr, num_nodes, node_area, area_ops=area_ops) )
+
+        ell = self._node_length_scale(edge_index, edge_attr, num_nodes)
+        ref_accel = (self.U_ref * self.U_ref) / ell.clamp_min(1e-8)
+        conv_nd  = conv / ref_accel.unsqueeze(-1)
+        pterm_nd = pterm / ref_accel.unsqueeze(-1)
+        diff_nd  = diff / ref_accel.unsqueeze(-1)
+        resid_nd = conv_nd + pterm_nd - diff_nd
+        mask = volume_mask if (volume_mask is not None and volume_mask.any()) else slice(None)
+        conv_rms = float(conv_nd[mask].norm(dim=1).mean())
+        p_rms    = float(pterm_nd[mask].norm(dim=1).mean())
+        d_rms    = float(diff_nd[mask].norm(dim=1).mean())
+        r_rms    = float(resid_nd[mask].norm(dim=1).mean())
+
+        print(
+            f"[phys][step {int(self._dbg_step.item())}] "
+            f"dx min/1%/10%/50% = {dmin:.3e}/{d01:.3e}/{d10:.3e}/{d50:.3e} | "
+            f"ND |conv|={conv_rms:.3e} |p-term|={p_rms:.3e} |diff|={d_rms:.3e} | resid={r_rms:.3e} | "
+            f"area_ops={'on' if area_ops else 'off'}"
+            + (f" r={float(area_r):.2f}" if area_r is not None and torch.isfinite(area_r) else "")
+        )
+
+    def _safe_dist(self, edge_attr: torch.Tensor) -> torch.Tensor:
+        """Floor small distances to prevent 1/dx explosions."""
+        dist = edge_attr[:, 2]
+        med = torch.median(dist)
+        floor = torch.clamp(med * 0.10, min=1e-8)
+        return torch.clamp(dist, min=floor)
+
+    def _node_length_scale(self, edge_index: torch.Tensor, edge_attr: torch.Tensor, num_nodes: int) -> torch.Tensor:
+        """Per-node local length scale: mean incident edge length."""
+        i, _ = edge_index
+        dist = self._safe_dist(edge_attr)
+        sum_dist = scatter_add(dist, i, dim=0, dim_size=num_nodes)
+        deg = scatter_add(torch.ones_like(dist), i, dim=0, dim_size=num_nodes).clamp_min(1.0)
+        ell = (sum_dist / deg).clamp_min(1e-6)
+        return ell
+
+
 if __name__ == "__main__":
-    print("Navier–Stokes physics loss (dynamic U∞/Re) ready.")
+    print("Navier-Stokes physics loss (dynamic U_inf/Re) ready.")
+    print("UnifiedNavierStokesPhysicsLoss also available.")
