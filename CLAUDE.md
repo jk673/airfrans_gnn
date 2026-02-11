@@ -10,10 +10,40 @@ AirfRANS GNN is a physics-informed Graph Neural Network framework for aerodynami
 
 ```bash
 # Python 3.11 required
-uv sync   # uses pyproject.toml with PyTorch CUDA 12.8 index
+uv sync   # uses pyproject.toml with PyTorch CUDA 12.4 index and prebuilt PyG wheels
 ```
 
 Key dependencies: PyTorch, PyTorch Geometric, torch-scatter, torch-sparse, wandb, scipy.
+
+## PyTorch 문서 참조 규칙 (Context7)
+
+- PyTorch 관련 질문(API 사용법, 설치, 설정, 예제 코드, 버전별 차이, deprecated 여부 등)에는 **항상 Context7 MCP를 사용**한다.
+- 기본은 **PyTorch 최신 stable 문서** 기준으로 답변한다.
+- Context7 library ID는 `/pytorch/pytorch`로 고정하여 사용한다.
+- 버전이 명시된 경우(예: PyTorch 2.1, 2.2, 2.5)에는 해당 버전 문서를 우선 참조한다.
+- PyTorch 관련 코드 생성, 디버깅, 성능 최적화 질문에도 동일하게 적용한다.
+
+**프롬프트 예시:**
+```python
+# torch.nn.functional.grid_sample의 align_corners 파라미터가 무엇인지 설명해줘
+# PyTorch 2.5에서 torch.compile 사용 예제를 보여줘
+# DataLoader의 num_workers 설정 시 권장사항은?
+```
+
+## PyTorch Geometric 문서 참조 규칙 (Context7)
+
+- PyTorch Geometric 관련 질문(GNN 레이어, 데이터 구조, 메시지 패싱, 배치 처리, 변환 등)에는 **항상 Context7 MCP를 사용**한다.
+- Context7 library ID는 `/pyg-team/pytorch_geometric`로 고정하여 사용한다.
+- PyG의 `Data`, `Batch`, `MessagePassing`, 각종 Conv 레이어(GCNConv, GATConv 등) 사용법 질문에 적용한다.
+- 그래프 전처리, 에지 구성, 노드/에지 피처 처리 관련 질문에도 동일하게 적용한다.
+
+**프롬프트 예시:**
+```python
+# MessagePassing 클래스의 propagate 메서드는 어떻게 동작하나?
+# torch_geometric.nn.GATConv의 heads 파라미터 설명
+# Batch.from_data_list()로 여러 그래프 배치 처리하는 방법
+# radius_graph와 knn_graph의 차이점은?
+```
 
 ## Commands
 
