@@ -675,7 +675,7 @@ def create_config_from_args(args):
     cfg.amp = args.amp
 
     # LR scheduler
-    cfg.lr_scheduler = None if args.lr_scheduler == 'none' else args.lr_scheduler
+    cfg.lr_scheduler = '' if args.lr_scheduler == 'none' else args.lr_scheduler
     cfg.cosine_T_max = args.cosine_T_max
     cfg.cosine_eta_min = args.cosine_eta_min
 
@@ -704,7 +704,7 @@ def create_config_from_args(args):
 
     # W&B
     cfg.wandb_project = args.wandb_project
-    cfg.wandb_run_name = args.wandb_name
+    cfg.wandb_name = args.wandb_name
     cfg.wandb_mode = args.wandb_mode
     cfg.wandb_tags = args.wandb_tags
     cfg.use_wandb_artifacts = args.use_wandb_artifacts
@@ -719,6 +719,8 @@ def create_config_from_args(args):
 
 def main():
     os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+    from dotenv import load_dotenv
+    load_dotenv()
 
     # Parse command line arguments
     args = parse_args()

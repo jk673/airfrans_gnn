@@ -142,6 +142,8 @@ class SmokeCfg:
     # W&B settings
     wandb_project: str = "airfrans-gnn"
     wandb_mode: str = "online"
+    wandb_name: Optional[str] = None
+    wandb_tags: Optional[list[str]] = None
     log_every_n_steps: int = -1
     log_epoch_only: bool = True
 
