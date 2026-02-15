@@ -24,6 +24,7 @@ coverage.xml
 # IDE / editors
 .vscode/
 .claude/
+.mcp.json
 
 # Type checking / linting
 .mypy_cache/

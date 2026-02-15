@@ -16,6 +16,7 @@ dependencies = [
     "wandb",
     "ipykernel",
     "psutil",
+    "python-dotenv",
     "notebook",
 ]
 

@@ -2,6 +2,53 @@
 
 이제 모든 노트북이 실행 가능한 Python 스크립트로 변환되었습니다.
 
+## 📦 환경 설치
+
+### 자동 설치 (권장)
+
+```bash
+chmod +x setup_env.sh && ./setup_env.sh
+source .venv/bin/activate
+```
+
+`setup_env.sh`가 아래 과정을 자동으로 수행합니다:
+1. **uv** 패키지 매니저 설치
+2. **Python 3.11** 설치 (프로젝트 요구사항)
+3. 가상환경 생성 + 전체 의존성 설치 (PyTorch CUDA 12.4 포함)
+4. CUDA/GPU 확인 및 import 검증
+
+### 수동 설치
+
+```bash
+# 1. uv 설치
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 2. Python 3.11 설치 + 의존성 설치
+uv python install 3.11
+uv sync --python 3.11
+
+# 3. 환경 활성화
+source .venv/bin/activate
+```
+
+### 필수 의존성 목록
+
+| 패키지 | 버전 | 용도 |
+|--------|------|------|
+| torch | 2.4.0+cu124 | 딥러닝 프레임워크 |
+| torch-geometric | 2.7.0 | 그래프 뉴럴 네트워크 |
+| torch-scatter | 2.1.2+cu124 | scatter 연산 (물리 손실함수) |
+| torch-sparse | 0.6.18+cu124 | sparse 텐서 연산 |
+| torch-cluster | 1.6.3+cu124 | 그래프 클러스터링 |
+| numpy | - | 수치 연산 |
+| scipy | - | 과학 계산 |
+| matplotlib | - | 시각화 |
+| tqdm | - | 진행 바 |
+| wandb | - | 실험 추적 |
+| python-dotenv | - | 환경 변수 로드 |
+
+> **참고**: NVIDIA GPU + CUDA 12.4 환경을 권장합니다. CPU만 사용할 경우 `pyproject.toml`의 `extra-index-url`을 CPU 버전으로 변경하세요.
+
 ## 🚀 빠른 시작
 
 ### 1. 기본 학습 실행
