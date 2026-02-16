@@ -108,6 +108,9 @@ Physics weights ramp up over training via linear or cosine curriculum schedule. 
 | `src/multigraph_convolution.py` | Multi-scale and dilated graph convolutions |
 | `src/force_coefficients_calculation.py` | Lift/drag coefficient integration from surface pressure |
 | `src/utils.py` / `src/utils_prune.py` | Graph utilities and isolated node pruning |
+| `benchmark/benchmark_reference.json` | FLOW-GLIDE 논문의 10개 baseline 메트릭 |
+| `benchmark/scoring_guide.md` | 벤치마크 스코어링 상세 워크플로우 가이드 |
+| `scripts/score_benchmark.py` | CLI 벤치마크 스코어링 (6개 메트릭 계산 + 비교 테이블) |
 
 ### Edge Attribute Schema
 
@@ -164,11 +167,11 @@ python scripts/score_benchmark.py \
 
 ### 출력 파일
 
-- `benchmark_results.json` — 메트릭 값 + 메타데이터
-- `benchmark_results.md` — FLOW-GLIDE 비교 마크다운 테이블
+- `benchmark/results.json` — 메트릭 값 + 메타데이터
+- `benchmark/results.md` — FLOW-GLIDE 비교 마크다운 테이블
 
 ### 참고
 
-- `benchmark_reference.json` — FLOW-GLIDE 논문의 10개 baseline 메트릭
-- `docs/benchmark/benchmark_scoring.md` — 상세 워크플로우 가이드
+- `benchmark/benchmark_reference.json` — FLOW-GLIDE 논문의 10개 baseline 메트릭
+- `benchmark/scoring_guide.md` — 상세 워크플로우 가이드
 - `--hidden`/`--layers`는 체크포인트 훈련 시 사용한 값과 반드시 일치해야 함

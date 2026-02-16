@@ -402,7 +402,7 @@ def build_bc_masks_airfrans(
     wall_dist_col: int = 2,           # x[:,2] = wall distance
     normal_cols: tuple = (3, 4),      # x[:,3], x[:,4] = wall normal (0 if not surface)
     inlet_outlet_quantile: float = 0.02,
-    farfield_quantile: float = 0.90,
+    farfield_outer_frac: float = 0.10,
     wall_dist_thresh: float = 1e-4,
     use_grad_for_normals_if_missing: bool = True,
     U_inf_from_x: bool = True,
@@ -509,10 +509,11 @@ def build_bc_masks_airfrans(
     is_outlet = (xcoord >= x_max_q) & (~is_wall)
 
     # farfield (outer quantile box)
-    x_lo = torch.quantile(xcoord, 1.0 - farfield_quantile)
-    x_hi = torch.quantile(xcoord, farfield_quantile)
-    y_lo = torch.quantile(ycoord, 1.0 - farfield_quantile)
-    y_hi = torch.quantile(ycoord, farfield_quantile)
+    # farfield_outer_frac=0.10 → 각 축 양끝 10% 영역이 farfield
+    x_lo = torch.quantile(xcoord, farfield_outer_frac)
+    x_hi = torch.quantile(xcoord, 1.0 - farfield_outer_frac)
+    y_lo = torch.quantile(ycoord, farfield_outer_frac)
+    y_hi = torch.quantile(ycoord, 1.0 - farfield_outer_frac)
     is_outer_box = (xcoord <= x_lo) | (xcoord >= x_hi) | (ycoord <= y_lo) | (ycoord >= y_hi)
     is_farfield = is_outer_box & (~is_wall) & (~is_inlet) & (~is_outlet)
 

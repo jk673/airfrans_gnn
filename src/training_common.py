@@ -205,36 +205,20 @@ class NormalizedDataset(torch.utils.data.Dataset):
                 dm.edge_attr_dxdy = d.edge_attr[:, -2:]
             dm.edge_attr = d.edge_attr
 
-        # Build BC masks
-        dm = build_bc_masks_airfrans(dm)
+        # Build BC masks from RAW (unnormalized) features
+        # Normalized x breaks wall_distance thresholds and normal detection
+        d_raw = d.clone()
+        if hasattr(dm, 'edge_index'):
+            d_raw.edge_index = dm.edge_index
+        if hasattr(dm, 'edge_attr_dxdy'):
+            d_raw.edge_attr_dxdy = dm.edge_attr_dxdy
+        elif hasattr(dm, 'edge_attr'):
+            d_raw.edge_attr = dm.edge_attr
+        d_raw = build_bc_masks_airfrans(d_raw)
 
-        # Fallback BC masks if build_bc_masks_airfrans didn't set individual masks
-        if not hasattr(dm, 'bc_mask_dict'):
-            num_nodes = dm.x.size(0)
-            x_orig = d.x
-
-            if x_orig.size(1) > 2:
-                wall_dist = x_orig[:, 2]
-                dm.is_wall = (wall_dist < 1e-6)
-            else:
-                dm.is_wall = torch.zeros(num_nodes, dtype=torch.bool)
-
-            if not hasattr(dm, 'is_inlet'):
-                dm.is_inlet = torch.zeros(num_nodes, dtype=torch.bool)
-            if not hasattr(dm, 'is_outlet'):
-                dm.is_outlet = torch.zeros(num_nodes, dtype=torch.bool)
-            if not hasattr(dm, 'is_farfield'):
-                dm.is_farfield = torch.zeros(num_nodes, dtype=torch.bool)
-
-            if hasattr(dm, 'pos'):
-                x_coords = dm.pos[:, 0]
-                y_coords = dm.pos[:, 1]
-                dm.is_inlet = (x_coords < -1.0) & ~dm.is_wall
-                dm.is_outlet = (x_coords > 2.0) & ~dm.is_wall
-                dm.is_farfield = (torch.abs(y_coords) > 1.0) & ~dm.is_wall & ~dm.is_inlet & ~dm.is_outlet
-        else:
-            for bc_type, mask in dm.bc_mask_dict.items():
-                setattr(dm, f'is_{bc_type}', mask)
+        for attr in ['is_wall', 'is_inlet', 'is_outlet', 'is_farfield', 'inlet_u', 'wall_normal']:
+            if hasattr(d_raw, attr):
+                setattr(dm, attr, getattr(d_raw, attr))
 
         return dm
 

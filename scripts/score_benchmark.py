@@ -49,6 +49,8 @@ from src.global_context_processor import EnhancedCFDModelWithGlobalContext
 from src.utils import _prep_graph_for_norm
 from src.metrics import surface_mask_from_x_phys, compute_force_coefficients
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 
 # ============================================================================
 # Metric computation
@@ -215,7 +217,7 @@ def score_test_set(
 def load_benchmark_reference(path: Optional[str] = None) -> Dict:
     """Load FLOW-GLIDE reference table."""
     if path is None:
-        path = str(PROJECT_ROOT / "benchmark_reference.json")
+        path = str(PROJECT_ROOT / "benchmark" / "benchmark_reference.json")
     if not os.path.exists(path):
         return {}
     with open(path, 'r') as f:
@@ -344,9 +346,9 @@ def parse_args():
     p.add_argument("--layers", type=int, default=14)
 
     # Output
-    p.add_argument("--output", type=str, default="benchmark_results.json",
+    p.add_argument("--output", type=str, default="benchmark/results.json",
                    help="Path for JSON results")
-    p.add_argument("--output-md", type=str, default="benchmark_results.md",
+    p.add_argument("--output-md", type=str, default="benchmark/results.md",
                    help="Path for Markdown comparison table")
     p.add_argument("--reference", type=str, default=None,
                    help="Path to benchmark_reference.json (auto-detected)")

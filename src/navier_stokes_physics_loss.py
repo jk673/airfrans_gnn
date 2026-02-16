@@ -348,6 +348,8 @@ class NavierStokesPhysicsLoss(nn.Module):
         ramp_start_step: int = 0,          # 공용 시작 스텝(0=즉시 시작)
         cont_ramp_start_step: int = -1,    # 개별 시작 스텝(-1=공용 사용)
         mom_ramp_start_step: int = -1,     # 개별 시작 스텝(-1=공용 사용)
+        bc_ramp_start_step: int = -1,      # BC 시작 스텝(-1=공용 사용)
+        bc_curriculum_ramp_steps: int = -1, # BC 전용 램프 스텝(-1=공용 사용)
 
         # physics
         reynolds_number: float = 1e6,          # used if dynamic_re_from_data=False
@@ -396,6 +398,8 @@ class NavierStokesPhysicsLoss(nn.Module):
         self.ramp_start_step = int(ramp_start_step)
         self.cont_ramp_start_step = int(cont_ramp_start_step)
         self.mom_ramp_start_step  = int(mom_ramp_start_step)
+        self.bc_ramp_start_step   = int(bc_ramp_start_step)
+        self.bc_curr_steps        = int(bc_curriculum_ramp_steps)
         self.ramp_mode = str(ramp_mode)
 
         self.Re = reynolds_number
@@ -745,15 +749,27 @@ class NavierStokesPhysicsLoss(nn.Module):
                     print(f"Warning: is_inlet mask size {mask_in.size(0)} != pred size {N}, skipping BC loss")
                     return torch.zeros(1, device=device)
                 u_inlet = u[mask_in]
+                n_inlet = mask_in.sum().item()
                 inlet_u = getattr(data, 'inlet_u', None)
                 if inlet_u is not None:
                     inlet_u = inlet_u.to(device)
-                    # Ensure inlet_u is properly sized for batched data
-                    if inlet_u.size(0) != mask_in.sum():
-                        # If inlet_u is provided per-graph, we need to expand it
-                        inlet_u_target = inlet_u[mask_in]
-                    else:
+                    # Shape dispatch for various upstream formats
+                    if inlet_u.shape[0] == n_inlet and inlet_u.dim() == 2:
+                        # Already correctly sized [n_inlet, 2]
                         inlet_u_target = inlet_u
+                    elif inlet_u.shape[0] == N and inlet_u.dim() == 2:
+                        # Full-graph size [N, 2] → filter by mask
+                        inlet_u_target = inlet_u[mask_in]
+                    elif inlet_u.dim() == 1 and inlet_u.shape[0] == 2:
+                        # Per-graph single vector [2] → broadcast
+                        inlet_u_target = inlet_u.unsqueeze(0).expand(n_inlet, -1)
+                    else:
+                        import warnings
+                        warnings.warn(
+                            f"inlet_u shape {tuple(inlet_u.shape)} unexpected for "
+                            f"n_inlet={n_inlet}, N={N}; using (1,0) fallback"
+                        )
+                        inlet_u_target = torch.tensor([[1.0, 0.0]], device=device).expand(n_inlet, -1)
                     loss_terms.append(((u_inlet - inlet_u_target) ** 2).mean())
                 else:
                     target = torch.tensor([[1.0, 0.0]], device=device).expand_as(u_inlet)
@@ -773,7 +789,7 @@ class NavierStokesPhysicsLoss(nn.Module):
                 loss_terms.append(0.1 * ((u_far - target_u) ** 2).mean())
                 loss_terms.append(0.1 * (p_far ** 2).mean())
 
-        # outlet: p≈0
+        # outlet: pressure pinning p≈0 (Dirichlet, not zero-gradient)
         is_out = getattr(data, 'is_outlet', None)
         if is_out is not None:
             mask_o = is_out.bool().to(device)
@@ -881,16 +897,17 @@ class NavierStokesPhysicsLoss(nn.Module):
             losses["bc_loss"] = bc_loss
 
         # 6) Curriculum ramp
-        ramp = self._ramp(step)
-        bc_w   = self.bc_w   * ramp  # ← 이후 합산에 bc_w를 실제 사용해야 함
-
         cont_steps = self.cont_curr_steps if self.cont_curr_steps >= 0 else self.curr_steps
         mom_steps  = self.mom_curr_steps  if self.mom_curr_steps  >= 0 else self.curr_steps
+        bc_steps   = self.bc_curr_steps   if self.bc_curr_steps   >= 0 else self.curr_steps
         cont_start = self.cont_ramp_start_step if self.cont_ramp_start_step >= 0 else self.ramp_start_step
         mom_start  = self.mom_ramp_start_step  if self.mom_ramp_start_step  >= 0 else self.ramp_start_step
+        bc_start   = self.bc_ramp_start_step   if self.bc_ramp_start_step   >= 0 else self.ramp_start_step
 
         r_cont = self._ramp_factor(step, cont_steps, cont_start)
         r_mom  = self._ramp_factor(step, mom_steps,  mom_start)
+        r_bc   = self._ramp_factor(step, bc_steps,   bc_start)
+        bc_w   = self.bc_w * r_bc
 
         cont_w = self.cont_w0 + (self.cont_w_target - self.cont_w0) * r_cont
         mom_w  = self.mom_w0  + (self.mom_w_target  - self.mom_w0)  * r_mom

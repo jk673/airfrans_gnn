@@ -53,3 +53,7 @@ processed_edges/
 
 # Checkpoint files
 checkpoints/
+
+# Benchmark results (generated, not tracked)
+benchmark/results.json
+benchmark/results.md
