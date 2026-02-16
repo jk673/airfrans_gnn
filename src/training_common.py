@@ -11,7 +11,9 @@ import os
 import glob
 import random
 import contextlib
+import json
 from dataclasses import dataclass, asdict
+from pathlib import Path
 from typing import Optional, Any, cast
 
 import numpy as np
@@ -53,6 +55,53 @@ def collate_pyg(batch):
     return Batch.from_data_list(batch)
 
 
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "configs" / "train_default.json"
+
+
+def _resolve_config_path(config_path: Optional[str]) -> Optional[Path]:
+    if config_path:
+        candidate = Path(config_path)
+        if not candidate.is_absolute():
+            candidate = Path(__file__).resolve().parents[1] / candidate
+        if candidate.exists():
+            return candidate
+        print(f"[config] Skipping missing config file: {candidate}")
+        return None
+
+    if DEFAULT_CONFIG_PATH.exists():
+        return DEFAULT_CONFIG_PATH
+    return None
+
+
+def load_config_file(config_path: Optional[str] = None) -> dict[str, Any]:
+    path = _resolve_config_path(config_path)
+    if path is None:
+        return {}
+
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            print(f"[config] Config file must be JSON object: {path}")
+            return {}
+        return data
+    except Exception as exc:
+        print(f"[config] Failed to load config: {path} ({exc})")
+        return {}
+
+
+def apply_config_dict(cfg_obj: Any, config_updates: dict[str, Any]) -> None:
+    for key, value in config_updates.items():
+        if not hasattr(cfg_obj, key):
+            continue
+        current = getattr(cfg_obj, key)
+        if isinstance(current, tuple) and isinstance(value, list):
+            value = tuple(value)
+        if key == "lr_scheduler":
+            value = None if value in ("", "none", "None") else value
+        setattr(cfg_obj, key, value)
+
+
 # ---------------------------------------------------------------------------
 # Configuration dataclass
 # ---------------------------------------------------------------------------
@@ -75,6 +124,8 @@ class SmokeCfg:
     betas: tuple[float, float] = (0.9, 0.95)
     eps: float = 1e-8
     amp: bool = False
+    dropout: float = 0.1
+    scheduler_step_per_batch: bool = False
 
     # lr scheduler: 'cosine', 'cosine_warm_restarts', 'reduce_on_plateau', or None
     lr_scheduler: str = 'cosine'
@@ -141,8 +192,10 @@ class SmokeCfg:
 
     # W&B settings
     wandb_project: str = "airfrans-gnn"
+    enable_wandb: bool = True
     wandb_mode: str = "online"
     wandb_name: Optional[str] = None
+    wandb_run_name: Optional[str] = None
     wandb_tags: Optional[list[str]] = None
     log_every_n_steps: int = -1
     log_epoch_only: bool = True
@@ -367,6 +420,10 @@ def compute_loss_with_physics(predictions, targets, data, loss_fn=None, *, step:
                 'mse_loss': float(mse_loss.detach().item()),
                 'continuity_loss': 0.0,
                 'momentum_loss': 0.0,
+                'bc_wall_loss': 0.0,
+                'bc_inlet_loss': 0.0,
+                'bc_outlet_loss': 0.0,
+                'bc_farfield_loss': 0.0,
                 'bc_loss': 0.0,
                 'total_loss': float(mse_loss.detach().item())
             }
@@ -374,6 +431,10 @@ def compute_loss_with_physics(predictions, targets, data, loss_fn=None, *, step:
         mse_loss = _mse_loss_fn(predictions, targets)
         return mse_loss, {
             'mse_loss': float(mse_loss.detach().item()),
+            'bc_wall_loss': 0.0,
+            'bc_inlet_loss': 0.0,
+            'bc_outlet_loss': 0.0,
+            'bc_farfield_loss': 0.0,
             'bc_loss': 0.0,
             'total_loss': float(mse_loss.detach().item())
         }
@@ -388,6 +449,10 @@ def run_epoch(loader, model, device, *, amp_enabled: bool = False, desc: str = '
     model.eval()
     total_losses, mse_losses, continuity_losses, momentum_losses = [], [], [], []
     bc_losses = []
+    bc_wall_losses = []
+    bc_inlet_losses = []
+    bc_outlet_losses = []
+    bc_farfield_losses = []
     cont_w_used_hist, mom_w_used_hist = [], []
 
     if loader is None or (isinstance(loader, list) and len(loader) == 0):
@@ -413,6 +478,10 @@ def run_epoch(loader, model, device, *, amp_enabled: bool = False, desc: str = '
             continuity_losses.append(loss_dict.get('continuity_loss', 0.0))
             momentum_losses.append(loss_dict.get('momentum_loss', 0.0))
             bc_losses.append(loss_dict.get('bc_loss', 0.0))
+            bc_wall_losses.append(loss_dict.get('bc_wall_loss', 0.0))
+            bc_inlet_losses.append(loss_dict.get('bc_inlet_loss', 0.0))
+            bc_outlet_losses.append(loss_dict.get('bc_outlet_loss', 0.0))
+            bc_farfield_losses.append(loss_dict.get('bc_farfield_loss', 0.0))
             if 'cont_weight_used' in loss_dict:
                 cont_w_used_hist.append(loss_dict['cont_weight_used'])
             if 'mom_weight_used' in loss_dict:
@@ -425,6 +494,14 @@ def run_epoch(loader, model, device, *, amp_enabled: bool = False, desc: str = '
                 postfix["momentum"] = f"{loss_dict['momentum_loss']:.4e}"
             if 'bc_loss' in loss_dict:
                 postfix["bc"] = f"{loss_dict['bc_loss']:.4e}"
+            if 'bc_wall_loss' in loss_dict:
+                postfix["bc_wall"] = f"{loss_dict['bc_wall_loss']:.4e}"
+            if 'bc_inlet_loss' in loss_dict:
+                postfix["bc_inlet"] = f"{loss_dict['bc_inlet_loss']:.4e}"
+            if 'bc_outlet_loss' in loss_dict:
+                postfix["bc_out"] = f"{loss_dict['bc_outlet_loss']:.4e}"
+            if 'bc_farfield_loss' in loss_dict:
+                postfix["bc_far"] = f"{loss_dict['bc_farfield_loss']:.4e}"
             pbar.set_postfix(postfix)
         finally:
             pbar.update(1)
@@ -437,6 +514,10 @@ def run_epoch(loader, model, device, *, amp_enabled: bool = False, desc: str = '
         'continuity_loss': np.mean(continuity_losses) if continuity_losses else float('nan'),
         'momentum_loss': np.mean(momentum_losses) if momentum_losses else float('nan'),
         'bc_loss': np.mean(bc_losses) if bc_losses else float('nan'),
+        'bc_wall_loss': np.mean(bc_wall_losses) if bc_wall_losses else float('nan'),
+        'bc_inlet_loss': np.mean(bc_inlet_losses) if bc_inlet_losses else float('nan'),
+        'bc_outlet_loss': np.mean(bc_outlet_losses) if bc_outlet_losses else float('nan'),
+        'bc_farfield_loss': np.mean(bc_farfield_losses) if bc_farfield_losses else float('nan'),
     }
     if cont_w_used_hist:
         avg_losses['cont_weight_used'] = float(np.mean(cont_w_used_hist))
@@ -456,6 +537,10 @@ def train_epoch(loader, model, optim, device, scaler, *,
     model.train()
     total_losses, mse_losses, continuity_losses, momentum_losses = [], [], [], []
     bc_losses = []
+    bc_wall_losses = []
+    bc_inlet_losses = []
+    bc_outlet_losses = []
+    bc_farfield_losses = []
     cont_w_used_hist, mom_w_used_hist = [], []
 
     global_step = global_step_start
@@ -502,6 +587,10 @@ def train_epoch(loader, model, optim, device, scaler, *,
             continuity_losses.append(loss_dict.get('continuity_loss', 0.0))
             momentum_losses.append(loss_dict.get('momentum_loss', 0.0))
             bc_losses.append(loss_dict.get('bc_loss', 0.0))
+            bc_wall_losses.append(loss_dict.get('bc_wall_loss', 0.0))
+            bc_inlet_losses.append(loss_dict.get('bc_inlet_loss', 0.0))
+            bc_outlet_losses.append(loss_dict.get('bc_outlet_loss', 0.0))
+            bc_farfield_losses.append(loss_dict.get('bc_farfield_loss', 0.0))
             if 'cont_weight_used' in loss_dict:
                 cont_w_used_hist.append(loss_dict['cont_weight_used'])
             if 'mom_weight_used' in loss_dict:
@@ -515,6 +604,10 @@ def train_epoch(loader, model, optim, device, scaler, *,
                     "train/continuity": loss_dict.get('continuity_loss', 0.0),
                     "train/momentum": loss_dict.get('momentum_loss', 0.0),
                     "train/bc": loss_dict.get('bc_loss', 0.0),
+                    "train/bc_wall": loss_dict.get('bc_wall_loss', 0.0),
+                    "train/bc_inlet": loss_dict.get('bc_inlet_loss', 0.0),
+                    "train/bc_outlet": loss_dict.get('bc_outlet_loss', 0.0),
+                    "train/bc_farfield": loss_dict.get('bc_farfield_loss', 0.0),
                 }
                 if 'cont_weight_used' in loss_dict:
                     log_payload["weight/cont_used"] = loss_dict['cont_weight_used']
@@ -533,6 +626,14 @@ def train_epoch(loader, model, optim, device, scaler, *,
                 postfix["momentum"] = f"{loss_dict['momentum_loss']:.4e}"
             if 'bc_loss' in loss_dict:
                 postfix["bc"] = f"{loss_dict['bc_loss']:.4e}"
+            if 'bc_wall_loss' in loss_dict:
+                postfix["bc_wall"] = f"{loss_dict['bc_wall_loss']:.4e}"
+            if 'bc_inlet_loss' in loss_dict:
+                postfix["bc_inlet"] = f"{loss_dict['bc_inlet_loss']:.4e}"
+            if 'bc_outlet_loss' in loss_dict:
+                postfix["bc_out"] = f"{loss_dict['bc_outlet_loss']:.4e}"
+            if 'bc_farfield_loss' in loss_dict:
+                postfix["bc_far"] = f"{loss_dict['bc_farfield_loss']:.4e}"
             pbar.set_postfix(postfix)
         finally:
             pbar.update(1)
@@ -546,6 +647,10 @@ def train_epoch(loader, model, optim, device, scaler, *,
         'continuity_loss': np.mean(continuity_losses) if continuity_losses else float('nan'),
         'momentum_loss': np.mean(momentum_losses) if momentum_losses else float('nan'),
         'bc_loss': np.mean(bc_losses) if bc_losses else float('nan'),
+        'bc_wall_loss': np.mean(bc_wall_losses) if bc_wall_losses else float('nan'),
+        'bc_inlet_loss': np.mean(bc_inlet_losses) if bc_inlet_losses else float('nan'),
+        'bc_outlet_loss': np.mean(bc_outlet_losses) if bc_outlet_losses else float('nan'),
+        'bc_farfield_loss': np.mean(bc_farfield_losses) if bc_farfield_losses else float('nan'),
     }
     if cont_w_used_hist:
         avg_losses['cont_weight_used'] = float(np.mean(cont_w_used_hist))
@@ -595,11 +700,21 @@ def create_lr_scheduler(optimizer, config):
 
 def init_wandb(scfg, loss_fn=None):
     """Initialize W&B run and configure epoch-only logging."""
+    enable_wandb = bool(getattr(scfg, "enable_wandb", True))
+    wandb_env = os.getenv("AIRFRANS_ENABLE_WANDB", "").strip().lower()
+    if wandb_env in {"0", "false", "f", "off", "no"}:
+        enable_wandb = False
+    elif wandb_env in {"1", "true", "t", "on", "yes"}:
+        enable_wandb = True
+
+    if not enable_wandb:
+        print("[wandb] disabled (use --enable-wandb or AIRFRANS_ENABLE_WANDB=1)")
+
     wandb_init_kwargs: dict[str, Any] = dict(
         project=getattr(scfg, "wandb_project", "airfrans-gnn"),
-        name=getattr(scfg, "wandb_run_name", None),
+        name=getattr(scfg, "wandb_run_name", getattr(scfg, "wandb_name", None)),
         tags=getattr(scfg, "wandb_tags", None),
-        mode=getattr(scfg, "wandb_mode", "online"),
+        mode="disabled" if not enable_wandb else getattr(scfg, "wandb_mode", "online"),
         settings=wandb.Settings(start_method="thread"),
         config={
             "epochs": getattr(scfg, "epochs", None),

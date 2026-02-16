@@ -5,95 +5,7 @@ import torch
 import wandb
 from torch.cuda.amp import GradScaler
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-
-
-def create_lr_scheduler(optimizer, config):
-    """
-    Configuration에 따라 적절한 LR scheduler를 생성합니다.
-
-    Args:
-        optimizer: PyTorch optimizer instance
-        config: Configuration object with scheduler settings
-
-    Returns:
-        LR scheduler or None if no scheduler is configured
-    """
-    if config.lr_scheduler is None:
-        print("🚫 Learning rate scheduler: None (constant LR)")
-        return None
-
-    elif config.lr_scheduler == 'cosine':
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            T_max=config.cosine_T_max,
-            eta_min=config.cosine_eta_min
-        )
-        print(f"📊 Learning rate scheduler: CosineAnnealingLR")
-        print(f"   T_max: {config.cosine_T_max}, eta_min: {config.cosine_eta_min}")
-        return scheduler
-
-    elif config.lr_scheduler == 'cosine_warm_restarts':
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            optimizer,
-            T_0=config.wr_T_0,
-            T_mult=config.wr_T_mult,
-            eta_min=config.wr_eta_min
-        )
-        print(f"🔄 Learning rate scheduler: CosineAnnealingWarmRestarts")
-        print(f"   T_0: {config.wr_T_0}, T_mult: {config.wr_T_mult}, eta_min: {config.wr_eta_min}")
-        return scheduler
-
-    elif config.lr_scheduler == 'reduce_on_plateau':
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            mode='min',  # validation loss를 minimize
-            factor=config.rop_factor,
-            patience=config.rop_patience,
-            min_lr=config.rop_min_lr,
-        )
-        print(f"📉 Learning rate scheduler: ReduceLROnPlateau")
-        print(f"   factor: {config.rop_factor}, patience: {config.rop_patience}, min_lr: {config.rop_min_lr}")
-        return scheduler
-
-    else:
-        print(f"❌ Unknown scheduler: {config.lr_scheduler}, using None")
-        return None
-
-
-def simulate_lr_schedule(config, create_lr_scheduler_fn, num_epochs=20):
-    """
-    LR 스케줄 변화를 시뮬레이션합니다.
-
-    Args:
-        config: Configuration object with scheduler settings
-        create_lr_scheduler_fn: Function to create scheduler
-        num_epochs: Number of epochs to simulate
-
-    Returns:
-        List of learning rates for each epoch
-    """
-    # 임시 optimizer 생성
-    temp_param = torch.nn.Parameter(torch.randn(1))
-    temp_opt = torch.optim.AdamW([temp_param], lr=config.lr)
-    temp_scheduler = create_lr_scheduler_fn(temp_opt, config)
-
-    lrs = []
-    val_losses = [1.0, 0.9, 0.85, 0.8, 0.85, 0.82, 0.81, 0.80, 0.82, 0.79,
-                  0.78, 0.77, 0.78, 0.76, 0.75, 0.76, 0.74, 0.73, 0.74, 0.72]
-
-    for epoch in range(num_epochs):
-        lrs.append(temp_opt.param_groups[0]['lr'])
-
-        if temp_scheduler is not None:
-            if config.lr_scheduler == 'reduce_on_plateau':
-                # ReduceLROnPlateau의 경우 validation loss 필요
-                val_loss = val_losses[epoch] if epoch < len(val_losses) else val_losses[-1]
-                temp_scheduler.step(val_loss)
-            else:
-                # 다른 스케줄러는 epoch만 필요
-                temp_scheduler.step()
-
-    return lrs
+from src.lr_schedule import create_lr_scheduler
 
 
 def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
@@ -167,11 +79,19 @@ def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
             "train/continuity_epoch": train_logs.get('continuity_loss', float('nan')),
             "train/momentum_epoch": train_logs.get('momentum_loss', float('nan')),
             "train/bc_epoch": train_logs.get('bc_loss', float('nan')),
+            "train/bc_wall_epoch": train_logs.get('bc_wall_loss', float('nan')),
+            "train/bc_inlet_epoch": train_logs.get('bc_inlet_loss', float('nan')),
+            "train/bc_outlet_epoch": train_logs.get('bc_outlet_loss', float('nan')),
+            "train/bc_farfield_epoch": train_logs.get('bc_farfield_loss', float('nan')),
             "val/total_epoch": val_logs['total_loss'],
             "val/mse_epoch": val_logs['mse_loss'],
             "val/continuity_epoch": val_logs.get('continuity_loss', float('nan')),
             "val/momentum_epoch": val_logs.get('momentum_loss', float('nan')),
             "val/bc_epoch": val_logs.get('bc_loss', float('nan')),
+            "val/bc_wall_epoch": val_logs.get('bc_wall_loss', float('nan')),
+            "val/bc_inlet_epoch": val_logs.get('bc_inlet_loss', float('nan')),
+            "val/bc_outlet_epoch": val_logs.get('bc_outlet_loss', float('nan')),
+            "val/bc_farfield_epoch": val_logs.get('bc_farfield_loss', float('nan')),
         }
 
         # Log per-channel MSE losses
@@ -279,8 +199,16 @@ def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
         # Print epoch summary
         print(f"Epoch {epoch:3d} | Train: total={train_total:.4f} mse={train_logs['mse_loss']:.4f} "
               f"cont={train_logs.get('continuity_loss', 0):.2e} mom={train_logs.get('momentum_loss', 0):.2e} "
-              f"bc={train_logs.get('bc_loss', 0):.2e} | "
+              f"bc={train_logs.get('bc_loss', 0):.2e} "
+              f"(w={train_logs.get('bc_wall_loss', 0):.2e}, "
+              f"in={train_logs.get('bc_inlet_loss', 0):.2e}, "
+              f"out={train_logs.get('bc_outlet_loss', 0):.2e}, "
+              f"ff={train_logs.get('bc_farfield_loss', 0):.2e}) | "
               f"Val: total={val_total:.4f} bc={val_logs.get('bc_loss', 0):.2e}"
+              f" (w={val_logs.get('bc_wall_loss', 0):.2e}, "
+              f"in={val_logs.get('bc_inlet_loss', 0):.2e}, "
+              f"out={val_logs.get('bc_outlet_loss', 0):.2e}, "
+              f"ff={val_logs.get('bc_farfield_loss', 0):.2e})"
               f" {'[BEST]' if is_best else ''}")
 
     # === Training 완료 후 최종 artifact ===
@@ -368,7 +296,19 @@ def run_training_experiment(model, train_loader, val_loader, scfg, device, loss_
         eps=scfg.eps
     )
 
-    scheduler = create_lr_scheduler(optimizer, scfg)
+    scheduler = create_lr_scheduler(
+        optimizer,
+        scfg,
+        lr_scheduler=getattr(scfg, "lr_scheduler", "cosine"),
+        cosine_T_max=getattr(scfg, "cosine_T_max", 80),
+        cosine_eta_min=getattr(scfg, "cosine_eta_min", 1e-6),
+        wr_T_0=getattr(scfg, "wr_T_0", 10),
+        wr_T_mult=getattr(scfg, "wr_T_mult", 1),
+        wr_eta_min=getattr(scfg, "wr_eta_min", 1e-6),
+        rop_factor=getattr(scfg, "rop_factor", 0.1),
+        rop_patience=getattr(scfg, "rop_patience", 10),
+        rop_min_lr=getattr(scfg, "rop_min_lr", 1e-7),
+    )
 
     # GradScaler for AMP
     scaler = torch.cuda.amp.GradScaler() if scfg.amp and torch.cuda.is_available() else None

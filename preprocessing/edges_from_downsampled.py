@@ -5,7 +5,7 @@ Build edges for downsampled AirfRANS graphs (step 2 of 2).
 Loads per-graph .pt files from downsample_airfrans.py and adds edge_index/edge_attr using
 preprocess_airfrans_edges.build_edges_for_graph with the default radii and surface ring.
 """
-import os, argparse
+import os, argparse, sys
 from typing import Optional, TYPE_CHECKING
 import torch
 
@@ -13,6 +13,13 @@ if TYPE_CHECKING:
     from preprocessing.config import EdgeConfig
 from torch_geometric.data import Data
 from tqdm import tqdm
+
+# Ensure project root is on sys.path for src imports
+_proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if _proj_root not in sys.path:
+    sys.path.insert(0, _proj_root)
+
+from src.airfrans_utils import build_bc_masks_airfrans
 
 
 def _import_preprocess_module(path: Optional[str] = None):
@@ -112,6 +119,8 @@ def run(cfg: 'EdgeConfig'):
                 d2 = pre_air.build_edges_for_graph(d2, params)
                 if hasattr(d2, 'edge_index') and d2.edge_index is not None and d2.edge_index.dtype != torch.long:
                     d2.edge_index = d2.edge_index.long()
+                # Bake BC masks into the graph so all downstream code has them
+                d2 = build_bc_masks_airfrans(d2)
                 orig_idx = None
                 try:
                     oi = getattr(d, 'orig_index', None)

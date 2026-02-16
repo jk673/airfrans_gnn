@@ -160,8 +160,16 @@ class EnhancedPhysicsLoss(nn.Module):
         losses.update(turb_losses)
         
         # 5. Boundary condition losses
-        bc_loss = self._compute_bc_loss(predictions, data)
-        losses['bc_loss'] = bc_loss
+        bc_info = self._compute_bc_loss(predictions, data)
+        if isinstance(bc_info, dict):
+            losses.update(bc_info)
+            losses['bc_loss'] = bc_info.get('bc_loss', torch.tensor(0.0, device=device))
+        else:
+            losses['bc_loss'] = bc_info
+            losses['bc_wall_loss'] = torch.tensor(0.0, device=device)
+            losses['bc_inlet_loss'] = torch.tensor(0.0, device=device)
+            losses['bc_outlet_loss'] = torch.tensor(0.0, device=device)
+            losses['bc_farfield_loss'] = torch.tensor(0.0, device=device)
         
         # 6. Smoothness regularization
         smooth_loss = self._compute_smoothness_loss(
@@ -170,9 +178,11 @@ class EnhancedPhysicsLoss(nn.Module):
         losses['smoothness_loss'] = smooth_loss
         
         # 7. Wall function loss
-        if hasattr(data, 'bc_mask_dict') and 'wall' in data.bc_mask_dict:
+        bc_masks = self._get_bc_masks(data)
+        wall_mask = bc_masks.get('wall', None)
+        if wall_mask is not None:
             wall_loss = self._compute_wall_function_loss(
-                u_pred, v_pred, nu_t_pred, data.bc_mask_dict['wall']
+                u_pred, v_pred, nu_t_pred, wall_mask
             )
             losses['wall_function_loss'] = wall_loss
         else:
@@ -197,6 +207,44 @@ class EnhancedPhysicsLoss(nn.Module):
         
         return losses
     
+
+    @staticmethod
+    def _to_bool_mask(mask):
+        if mask is None:
+            return None
+        if isinstance(mask, torch.Tensor):
+            if mask.dtype == torch.bool:
+                return mask
+            if mask.dtype in (torch.uint8, torch.int8, torch.int16, torch.int32, torch.int64):
+                return mask.to(torch.bool)
+            return mask != 0
+        return None
+
+    def _get_bc_masks(self, data):
+        """Get BC masks from bc_mask_dict when available; fallback to is_* attrs."""
+        bc_masks = {}
+
+        bc_dict = getattr(data, 'bc_mask_dict', None)
+        if isinstance(bc_dict, dict):
+            for key in ('wall', 'inlet', 'outlet', 'farfield'):
+                if key in bc_dict:
+                    bc_masks[key] = bc_dict[key]
+
+        if 'wall' not in bc_masks:
+            bc_masks['wall'] = getattr(data, 'is_wall', None)
+        if 'inlet' not in bc_masks:
+            bc_masks['inlet'] = getattr(data, 'is_inlet', None)
+        if 'outlet' not in bc_masks:
+            bc_masks['outlet'] = getattr(data, 'is_outlet', None)
+        if 'farfield' not in bc_masks:
+            bc_masks['farfield'] = getattr(data, 'is_farfield', None)
+
+        normalized = {}
+        for k, v in bc_masks.items():
+            bm = self._to_bool_mask(v)
+            if bm is not None:
+                normalized[k] = bm
+        return normalized
 
     def _compute_divergence_loss(self, u, v, edge_index, edge_attr_dxdy):
         """Compute divergence loss (continuity equation)"""
@@ -377,41 +425,109 @@ class EnhancedPhysicsLoss(nn.Module):
     
     def _compute_bc_loss(self, predictions, data):
         """Boundary condition losses"""
-        if not hasattr(data, 'bc_mask_dict'):
-            return torch.tensor(0.0, device=predictions.device)
+        bc_masks = self._get_bc_masks(data)
+        if not bc_masks:
+            zero = torch.tensor(0.0, device=predictions.device)
+            return {
+                'bc_loss': zero,
+                'bc_wall_loss': zero,
+                'bc_inlet_loss': zero,
+                'bc_outlet_loss': zero,
+                'bc_farfield_loss': zero,
+            }
         
         bc_losses = []
+        bc_terms = {}
         u_pred, v_pred, p_pred, nu_t_pred = predictions.unbind(dim=-1)
+        n_nodes = predictions.size(0)
+        device = predictions.device
+        zero = torch.tensor(0.0, device=device)
         
         # Wall BC: no-slip (u=v=0)
-        if 'wall' in data.bc_mask_dict:
-            wall_mask = data.bc_mask_dict['wall']
-            wall_loss = (u_pred[wall_mask]**2 + v_pred[wall_mask]**2).mean()
-            bc_losses.append(wall_loss)
+        if 'wall' in bc_masks:
+            wall_mask = bc_masks['wall'].to(device)
+            if wall_mask.numel() == n_nodes and wall_mask.any():
+                wall_loss = (u_pred[wall_mask]**2 + v_pred[wall_mask]**2).mean()
+                bc_losses.append(wall_loss)
+                bc_terms['bc_wall_loss'] = wall_loss
+            else:
+                bc_terms['bc_wall_loss'] = zero
+        else:
+            bc_terms['bc_wall_loss'] = zero
         
         # Inlet BC: prescribed velocity
-        if 'inlet' in data.bc_mask_dict and hasattr(data, 'x'):
-            inlet_mask = data.bc_mask_dict['inlet']
-            u_inlet_target = data.x[inlet_mask, 0]  # Assuming x contains inlet velocity
-            v_inlet_target = data.x[inlet_mask, 1]
-            inlet_loss = F.mse_loss(u_pred[inlet_mask], u_inlet_target) + \
-                        F.mse_loss(v_pred[inlet_mask], v_inlet_target)
-            bc_losses.append(inlet_loss)
+        if 'inlet' in bc_masks and hasattr(data, 'x'):
+            inlet_mask = bc_masks['inlet'].to(device)
+            if inlet_mask.numel() == n_nodes and inlet_mask.any():
+                inlet_targets = None
+                if hasattr(data, 'inlet_u') and data.inlet_u is not None:
+                    inlet_u = data.inlet_u
+                    if isinstance(inlet_u, torch.Tensor) and inlet_u.ndim >= 2 and inlet_u.shape[-1] >= 2 and inlet_u.shape[0] == n_nodes:
+                        inlet_targets = inlet_u[inlet_mask][:, :2]
+                if inlet_targets is None:
+                    inlet_targets = torch.stack([data.x[inlet_mask, 0], data.x[inlet_mask, 1]], dim=-1).to(device)
+                inlet_loss = F.mse_loss(u_pred[inlet_mask], inlet_targets[:, 0]) + \
+                            F.mse_loss(v_pred[inlet_mask], inlet_targets[:, 1])
+                bc_losses.append(inlet_loss)
+                bc_terms['bc_inlet_loss'] = inlet_loss
+            else:
+                bc_terms['bc_inlet_loss'] = zero
+        else:
+            bc_terms['bc_inlet_loss'] = zero
+        
+        # Farfield BC: weak freestream / near-zero pressure target
+        if 'farfield' in bc_masks and hasattr(data, 'x'):
+            farfield_mask = bc_masks['farfield'].to(device)
+            if farfield_mask.numel() == n_nodes and farfield_mask.any():
+                farfield_targets_u = None
+                if hasattr(data, 'inlet_u') and data.inlet_u is not None:
+                    inlet_u = data.inlet_u
+                    if isinstance(inlet_u, torch.Tensor) and inlet_u.ndim >= 2 and inlet_u.shape[-1] >= 2 and inlet_u.shape[0] == n_nodes:
+                        farfield_targets_u = inlet_u[farfield_mask][:, :2]
+                    elif isinstance(inlet_u, torch.Tensor) and inlet_u.ndim == 1 and inlet_u.numel() >= 2:
+                        farfield_targets_u = inlet_u[:2].to(device).view(1, 2).expand(farfield_mask.sum().item(), -1)
+                if farfield_targets_u is None:
+                    farfield_targets_u = torch.stack([data.x[farfield_mask, 0], data.x[farfield_mask, 1]], dim=-1).to(device)
+
+                target_u = farfield_targets_u[:, 0]
+                target_v = farfield_targets_u[:, 1]
+                p_target = torch.zeros_like(p_pred[farfield_mask])
+                farfield_loss = 0.1 * (
+                    F.mse_loss(u_pred[farfield_mask], target_u) +
+                    F.mse_loss(v_pred[farfield_mask], target_v) +
+                    F.mse_loss(p_pred[farfield_mask], p_target)
+                )
+                bc_losses.append(farfield_loss)
+                bc_terms['bc_farfield_loss'] = farfield_loss
+            else:
+                bc_terms['bc_farfield_loss'] = zero
+        else:
+            bc_terms['bc_farfield_loss'] = zero
         
         # Outlet BC: zero gradient (soft constraint)
-        if 'outlet' in data.bc_mask_dict and hasattr(data, 'edge_index'):
-            outlet_mask = data.bc_mask_dict['outlet']
-            # Find edges connected to outlet nodes
-            row, col = data.edge_index
-            outlet_edges = torch.isin(row, outlet_mask.nonzero().squeeze())
-            if outlet_edges.any():
-                du = (u_pred[col[outlet_edges]] - u_pred[row[outlet_edges]])**2
-                dv = (v_pred[col[outlet_edges]] - v_pred[row[outlet_edges]])**2
-                dp = (p_pred[col[outlet_edges]] - p_pred[row[outlet_edges]])**2
-                outlet_loss = (du + dv + dp).mean()
-                bc_losses.append(outlet_loss)
+        if 'outlet' in bc_masks and hasattr(data, 'edge_index'):
+            outlet_mask = bc_masks['outlet'].to(device)
+            if outlet_mask.numel() == n_nodes and outlet_mask.any():
+                # Find edges connected to outlet nodes
+                row, col = data.edge_index
+                outlet_nodes = torch.nonzero(outlet_mask, as_tuple=False).view(-1)
+                outlet_edges = torch.isin(row, outlet_nodes)
+                if outlet_edges.any():
+                    du = (u_pred[col[outlet_edges]] - u_pred[row[outlet_edges]])**2
+                    dv = (v_pred[col[outlet_edges]] - v_pred[row[outlet_edges]])**2
+                    dp = (p_pred[col[outlet_edges]] - p_pred[row[outlet_edges]])**2
+                    outlet_loss = (du + dv + dp).mean()
+                    bc_losses.append(outlet_loss)
+                    bc_terms['bc_outlet_loss'] = outlet_loss
+                else:
+                    bc_terms['bc_outlet_loss'] = zero
+            else:
+                bc_terms['bc_outlet_loss'] = zero
+        else:
+            bc_terms['bc_outlet_loss'] = zero
         
-        return sum(bc_losses) / len(bc_losses) if bc_losses else torch.tensor(0.0)
+        bc_terms['bc_loss'] = sum(bc_losses) / len(bc_losses) if bc_losses else zero
+        return bc_terms
     
     def _compute_smoothness_loss(self, predictions, edge_index):
         """Smoothness regularization"""

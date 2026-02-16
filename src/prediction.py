@@ -129,8 +129,8 @@ def predict_one_local(
         "scale": y_scaler.std.clone(),
     }
 
-    # Forward pass on device
-    dm_run = dm_norm.to(device)
+    # Forward pass on device (clone to keep dm_norm on CPU)
+    dm_run = dm_norm.clone().to(device)
     if amp_enabled and torch.cuda.is_available():
         with torch.amp.autocast(device_type="cuda"):
             y_pred_norm = model(dm_run).detach().cpu()

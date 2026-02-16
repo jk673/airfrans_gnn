@@ -175,3 +175,10 @@ python scripts/score_benchmark.py \
 - `benchmark/benchmark_reference.json` — FLOW-GLIDE 논문의 10개 baseline 메트릭
 - `benchmark/scoring_guide.md` — 상세 워크플로우 가이드
 - `--hidden`/`--layers`는 체크포인트 훈련 시 사용한 값과 반드시 일치해야 함
+
+## Notebook 수정 규칙
+
+- `.ipynb` 파일 수정 시 **NotebookEdit 도구를 사용하지 않는다** (디스크 반영 안 되는 버그 있음).
+- 대신 **Python으로 JSON을 직접 읽고 수정 후 `json.dump`로 저장**한다.
+- source 필드는 줄 단위 리스트이며, 마지막 줄을 제외한 각 줄 끝에 `\n`을 붙인다.
+- 수정 후 반드시 파일을 다시 읽어 변경 사항이 디스크에 반영되었는지 검증한다.

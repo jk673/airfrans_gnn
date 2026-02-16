@@ -1,6 +1,6 @@
 # AirfRANS 2D Airfoil - GNN Surrogate
 
-Auto-generated benchmark comparison. Updated: 2026-02-16 03:34:39 UTC
+Auto-generated benchmark comparison. Updated: 2026-02-16 10:44:02 UTC
 
 ## Benchmark Comparison
 
@@ -14,6 +14,671 @@ Auto-generated benchmark comparison. Updated: 2026-02-16 03:34:39 UTC
 ---
 
 ## Experiment Details
+
+### EXP_0009 — 2026-02-16 10:44:02 UTC
+
+**Model:** Ours | **Task:** scarce | **Parameters:** 143,172 | **Duration:** 6m 19s
+
+**Notes:** Training completed in 01_trainer.ipynb
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| finaltotal_loss | 5.6513 |
+| final_val_total_loss | 25.2646 |
+| best_val_total_loss | 25.2646 |
+| best_epoch | 49 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "seed": 42,
+  "task": "scarce",
+  "root": "Dataset",
+  "limit_train": 180,
+  "limit_val": 20,
+  "batch_size": 10,
+  "epochs": 50,
+  "hidden": 32,
+  "layers": 8,
+  "lr": 0.0004,
+  "weight_decay": 0.01,
+  "betas": [
+    0.9,
+    0.95
+  ],
+  "eps": 1e-08,
+  "amp": false,
+  "lr_scheduler": "cosine",
+  "cosine_T_max": 80,
+  "cosine_eta_min": 1e-06,
+  "wr_T_0": 10,
+  "wr_T_mult": 1,
+  "wr_eta_min": 1e-06,
+  "rop_factor": 0.5,
+  "rop_patience": 5,
+  "rop_min_lr": 1e-06,
+  "ramp_start_epoch": 40,
+  "ramp_epochs": 60,
+  "ramp_mode": "linear",
+  "data_loss_weight": 1.0,
+  "continuity_loss_weight": 0.05,
+  "continuity_target_weight": 0.2,
+  "momentum_loss_weight": 0.05,
+  "momentum_target_weight": 0.2,
+  "bc_loss_weight": 0.1,
+  "chord_length": 1.0,
+  "nu_molecular": 1.5e-05,
+  "dynamic_uref_from_data": true,
+  "dynamic_re_from_data": true,
+  "uinf_from": "inlet",
+  "use_huber_for_physics": true,
+  "huber_delta": 0.05,
+  "use_perimeter_norm_for_div": true,
+  "div_area_floor_factor": 0.25,
+  "div_min_degree": 2,
+  "physics_debug": false,
+  "physics_debug_level": 1,
+  "physics_debug_every": 50,
+  "use_global_tokens": true,
+  "num_global_tokens": 2,
+  "attention_heads": 2,
+  "attention_layers": 2,
+  "attention_dropout": 0.0,
+  "use_cross_attention": true,
+  "global_pooling_type": "attention",
+  "positional_encoding": false,
+  "pos_encoding_max_len": 50000,
+  "use_residual_attention": true,
+  "attention_normalization": "layer",
+  "temperature_scaling": false,
+  "attention_bias": false,
+  "use_wandb_artifacts": false,
+  "artifact_save_best_only": true,
+  "artifact_save_interval": 50,
+  "ckpt_dir": "checkpoints",
+  "ckpt_interval": 5,
+  "wandb_project": "airfrans-gnn",
+  "wandb_mode": "online",
+  "log_every_n_steps": -1,
+  "log_epoch_only": true
+}
+```
+
+</details>
+
+---
+
+### EXP_0008 — 2026-02-16 10:36:02 UTC
+
+**Model:** Ours | **Task:** scarce | **Parameters:** 143,172 | **Duration:** 40s
+
+**Notes:** Training completed in 01_trainer.ipynb
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| finaltotal_loss | 16.7089 |
+| final_val_total_loss | 26.0013 |
+| best_val_total_loss | 26.0013 |
+| best_epoch | 4 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "seed": 42,
+  "task": "scarce",
+  "root": "Dataset",
+  "limit_train": 180,
+  "limit_val": 20,
+  "batch_size": 10,
+  "epochs": 5,
+  "hidden": 32,
+  "layers": 8,
+  "lr": 0.0004,
+  "weight_decay": 0.01,
+  "betas": [
+    0.9,
+    0.95
+  ],
+  "eps": 1e-08,
+  "amp": false,
+  "lr_scheduler": "cosine",
+  "cosine_T_max": 80,
+  "cosine_eta_min": 1e-06,
+  "wr_T_0": 10,
+  "wr_T_mult": 1,
+  "wr_eta_min": 1e-06,
+  "rop_factor": 0.5,
+  "rop_patience": 5,
+  "rop_min_lr": 1e-06,
+  "ramp_start_epoch": 40,
+  "ramp_epochs": 60,
+  "ramp_mode": "linear",
+  "data_loss_weight": 1.0,
+  "continuity_loss_weight": 0.05,
+  "continuity_target_weight": 0.2,
+  "momentum_loss_weight": 0.05,
+  "momentum_target_weight": 0.2,
+  "bc_loss_weight": 0.1,
+  "chord_length": 1.0,
+  "nu_molecular": 1.5e-05,
+  "dynamic_uref_from_data": true,
+  "dynamic_re_from_data": true,
+  "uinf_from": "inlet",
+  "use_huber_for_physics": true,
+  "huber_delta": 0.05,
+  "use_perimeter_norm_for_div": true,
+  "div_area_floor_factor": 0.25,
+  "div_min_degree": 2,
+  "physics_debug": false,
+  "physics_debug_level": 1,
+  "physics_debug_every": 50,
+  "use_global_tokens": true,
+  "num_global_tokens": 2,
+  "attention_heads": 2,
+  "attention_layers": 2,
+  "attention_dropout": 0.0,
+  "use_cross_attention": true,
+  "global_pooling_type": "attention",
+  "positional_encoding": false,
+  "pos_encoding_max_len": 50000,
+  "use_residual_attention": true,
+  "attention_normalization": "layer",
+  "temperature_scaling": false,
+  "attention_bias": false,
+  "use_wandb_artifacts": false,
+  "artifact_save_best_only": true,
+  "artifact_save_interval": 50,
+  "ckpt_dir": "checkpoints",
+  "ckpt_interval": 5,
+  "wandb_project": "airfrans-gnn",
+  "wandb_mode": "online",
+  "log_every_n_steps": -1,
+  "log_epoch_only": true
+}
+```
+
+</details>
+
+---
+
+### EXP_0007 — 2026-02-16 10:29:49 UTC
+
+**Model:** Ours | **Task:** scarce | **Parameters:** 143,172 | **Duration:** 39s
+
+**Notes:** Training completed in 01_trainer.ipynb
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| finaltotal_loss | 16.7130 |
+| final_val_total_loss | 26.0048 |
+| best_val_total_loss | 26.0048 |
+| best_epoch | 4 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "seed": 42,
+  "task": "scarce",
+  "root": "Dataset",
+  "limit_train": 180,
+  "limit_val": 20,
+  "batch_size": 10,
+  "epochs": 5,
+  "hidden": 32,
+  "layers": 8,
+  "lr": 0.0004,
+  "weight_decay": 0.01,
+  "betas": [
+    0.9,
+    0.95
+  ],
+  "eps": 1e-08,
+  "amp": false,
+  "lr_scheduler": "cosine",
+  "cosine_T_max": 80,
+  "cosine_eta_min": 1e-06,
+  "wr_T_0": 10,
+  "wr_T_mult": 1,
+  "wr_eta_min": 1e-06,
+  "rop_factor": 0.5,
+  "rop_patience": 5,
+  "rop_min_lr": 1e-06,
+  "ramp_start_epoch": 40,
+  "ramp_epochs": 60,
+  "ramp_mode": "linear",
+  "data_loss_weight": 1.0,
+  "continuity_loss_weight": 0.05,
+  "continuity_target_weight": 0.2,
+  "momentum_loss_weight": 0.05,
+  "momentum_target_weight": 0.2,
+  "bc_loss_weight": 0.1,
+  "chord_length": 1.0,
+  "nu_molecular": 1.5e-05,
+  "dynamic_uref_from_data": true,
+  "dynamic_re_from_data": true,
+  "uinf_from": "inlet",
+  "use_huber_for_physics": true,
+  "huber_delta": 0.05,
+  "use_perimeter_norm_for_div": true,
+  "div_area_floor_factor": 0.25,
+  "div_min_degree": 2,
+  "physics_debug": false,
+  "physics_debug_level": 1,
+  "physics_debug_every": 50,
+  "use_global_tokens": true,
+  "num_global_tokens": 2,
+  "attention_heads": 2,
+  "attention_layers": 2,
+  "attention_dropout": 0.0,
+  "use_cross_attention": true,
+  "global_pooling_type": "attention",
+  "positional_encoding": false,
+  "pos_encoding_max_len": 50000,
+  "use_residual_attention": true,
+  "attention_normalization": "layer",
+  "temperature_scaling": false,
+  "attention_bias": false,
+  "use_wandb_artifacts": false,
+  "artifact_save_best_only": true,
+  "artifact_save_interval": 50,
+  "ckpt_dir": "checkpoints",
+  "ckpt_interval": 5,
+  "wandb_project": "airfrans-gnn",
+  "wandb_mode": "online",
+  "log_every_n_steps": -1,
+  "log_epoch_only": true
+}
+```
+
+</details>
+
+---
+
+### EXP_0006 — 2026-02-16 10:06:38 UTC
+
+**Model:** Ours | **Task:** scarce | **Parameters:** 143,172 | **Duration:** 41s
+
+**Notes:** Training completed in 01_trainer.ipynb
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| finaltotal_loss | 16.7008 |
+| final_val_total_loss | 25.9948 |
+| best_val_total_loss | 25.9948 |
+| best_epoch | 4 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "seed": 42,
+  "task": "scarce",
+  "root": "Dataset",
+  "limit_train": 180,
+  "limit_val": 20,
+  "batch_size": 10,
+  "epochs": 5,
+  "hidden": 32,
+  "layers": 8,
+  "lr": 0.0004,
+  "weight_decay": 0.01,
+  "betas": [
+    0.9,
+    0.95
+  ],
+  "eps": 1e-08,
+  "amp": false,
+  "lr_scheduler": "cosine",
+  "cosine_T_max": 80,
+  "cosine_eta_min": 1e-06,
+  "wr_T_0": 10,
+  "wr_T_mult": 1,
+  "wr_eta_min": 1e-06,
+  "rop_factor": 0.5,
+  "rop_patience": 5,
+  "rop_min_lr": 1e-06,
+  "ramp_start_epoch": 40,
+  "ramp_epochs": 60,
+  "ramp_mode": "linear",
+  "data_loss_weight": 1.0,
+  "continuity_loss_weight": 0.05,
+  "continuity_target_weight": 0.2,
+  "momentum_loss_weight": 0.05,
+  "momentum_target_weight": 0.2,
+  "bc_loss_weight": 0.1,
+  "chord_length": 1.0,
+  "nu_molecular": 1.5e-05,
+  "dynamic_uref_from_data": true,
+  "dynamic_re_from_data": true,
+  "uinf_from": "inlet",
+  "use_huber_for_physics": true,
+  "huber_delta": 0.05,
+  "use_perimeter_norm_for_div": true,
+  "div_area_floor_factor": 0.25,
+  "div_min_degree": 2,
+  "physics_debug": false,
+  "physics_debug_level": 1,
+  "physics_debug_every": 50,
+  "use_global_tokens": true,
+  "num_global_tokens": 2,
+  "attention_heads": 2,
+  "attention_layers": 2,
+  "attention_dropout": 0.0,
+  "use_cross_attention": true,
+  "global_pooling_type": "attention",
+  "positional_encoding": false,
+  "pos_encoding_max_len": 50000,
+  "use_residual_attention": true,
+  "attention_normalization": "layer",
+  "temperature_scaling": false,
+  "attention_bias": false,
+  "use_wandb_artifacts": false,
+  "artifact_save_best_only": true,
+  "artifact_save_interval": 50,
+  "ckpt_dir": "checkpoints",
+  "ckpt_interval": 5,
+  "wandb_project": "airfrans-gnn",
+  "wandb_mode": "online",
+  "log_every_n_steps": -1,
+  "log_epoch_only": true
+}
+```
+
+</details>
+
+---
+
+### EXP_0005 — 2026-02-16 08:17:06 UTC
+
+**Model:** Ours | **Task:** scarce | **Parameters:** 143,172 | **Duration:** 3m 47s
+
+**Notes:** Training completed in 01_trainer.ipynb
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| finaltotal_loss | 1.0338 |
+| final_val_total_loss | 25.1979 |
+| best_val_total_loss | 25.1979 |
+| best_epoch | 29 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "seed": 42,
+  "task": "scarce",
+  "root": "Dataset",
+  "limit_train": 180,
+  "limit_val": 20,
+  "batch_size": 10,
+  "epochs": 30,
+  "hidden": 32,
+  "layers": 8,
+  "lr": 0.0004,
+  "weight_decay": 0.01,
+  "betas": [
+    0.9,
+    0.95
+  ],
+  "eps": 1e-08,
+  "amp": false,
+  "lr_scheduler": "cosine",
+  "cosine_T_max": 80,
+  "cosine_eta_min": 1e-06,
+  "wr_T_0": 10,
+  "wr_T_mult": 1,
+  "wr_eta_min": 1e-06,
+  "rop_factor": 0.5,
+  "rop_patience": 5,
+  "rop_min_lr": 1e-06,
+  "ramp_start_epoch": 40,
+  "ramp_epochs": 60,
+  "ramp_mode": "linear",
+  "data_loss_weight": 1.0,
+  "continuity_loss_weight": 0.05,
+  "continuity_target_weight": 0.2,
+  "momentum_loss_weight": 0.05,
+  "momentum_target_weight": 0.2,
+  "bc_loss_weight": 0.1,
+  "chord_length": 1.0,
+  "nu_molecular": 1.5e-05,
+  "dynamic_uref_from_data": true,
+  "dynamic_re_from_data": true,
+  "uinf_from": "inlet",
+  "use_huber_for_physics": true,
+  "huber_delta": 0.05,
+  "use_perimeter_norm_for_div": true,
+  "div_area_floor_factor": 0.25,
+  "div_min_degree": 2,
+  "physics_debug": false,
+  "physics_debug_level": 1,
+  "physics_debug_every": 50,
+  "use_global_tokens": true,
+  "num_global_tokens": 2,
+  "attention_heads": 2,
+  "attention_layers": 2,
+  "attention_dropout": 0.0,
+  "use_cross_attention": true,
+  "global_pooling_type": "attention",
+  "positional_encoding": false,
+  "pos_encoding_max_len": 50000,
+  "use_residual_attention": true,
+  "attention_normalization": "layer",
+  "temperature_scaling": false,
+  "attention_bias": false,
+  "use_wandb_artifacts": false,
+  "artifact_save_best_only": true,
+  "artifact_save_interval": 50,
+  "ckpt_dir": "checkpoints",
+  "ckpt_interval": 5,
+  "wandb_project": "airfrans-gnn",
+  "wandb_mode": "online",
+  "log_every_n_steps": -1,
+  "log_epoch_only": true
+}
+```
+
+</details>
+
+---
+
+### EXP_0004 — 2026-02-16 07:56:18 UTC
+
+**Model:** Ours | **Task:** scarce | **Parameters:** 143,172 | **Duration:** 3m 46s
+
+**Notes:** Training completed in 01_trainer.ipynb
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| finaltotal_loss | 1.0394 |
+| final_val_total_loss | 25.2963 |
+| best_val_total_loss | 25.2963 |
+| best_epoch | 29 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "seed": 42,
+  "task": "scarce",
+  "root": "Dataset",
+  "limit_train": 180,
+  "limit_val": 20,
+  "batch_size": 10,
+  "epochs": 30,
+  "hidden": 32,
+  "layers": 8,
+  "lr": 0.0004,
+  "weight_decay": 0.01,
+  "betas": [
+    0.9,
+    0.95
+  ],
+  "eps": 1e-08,
+  "amp": false,
+  "lr_scheduler": "cosine",
+  "cosine_T_max": 80,
+  "cosine_eta_min": 1e-06,
+  "wr_T_0": 10,
+  "wr_T_mult": 1,
+  "wr_eta_min": 1e-06,
+  "rop_factor": 0.5,
+  "rop_patience": 5,
+  "rop_min_lr": 1e-06,
+  "ramp_start_epoch": 40,
+  "ramp_epochs": 60,
+  "ramp_mode": "linear",
+  "data_loss_weight": 1.0,
+  "continuity_loss_weight": 0.05,
+  "continuity_target_weight": 0.2,
+  "momentum_loss_weight": 0.05,
+  "momentum_target_weight": 0.2,
+  "bc_loss_weight": 0.1,
+  "chord_length": 1.0,
+  "nu_molecular": 1.5e-05,
+  "dynamic_uref_from_data": true,
+  "dynamic_re_from_data": true,
+  "uinf_from": "inlet",
+  "use_huber_for_physics": true,
+  "huber_delta": 0.05,
+  "use_perimeter_norm_for_div": true,
+  "div_area_floor_factor": 0.25,
+  "div_min_degree": 2,
+  "physics_debug": false,
+  "physics_debug_level": 1,
+  "physics_debug_every": 50,
+  "use_global_tokens": true,
+  "num_global_tokens": 2,
+  "attention_heads": 2,
+  "attention_layers": 2,
+  "attention_dropout": 0.0,
+  "use_cross_attention": true,
+  "global_pooling_type": "attention",
+  "positional_encoding": false,
+  "pos_encoding_max_len": 50000,
+  "use_residual_attention": true,
+  "attention_normalization": "layer",
+  "temperature_scaling": false,
+  "attention_bias": false,
+  "use_wandb_artifacts": false,
+  "artifact_save_best_only": true,
+  "artifact_save_interval": 50,
+  "ckpt_dir": "checkpoints",
+  "ckpt_interval": 5,
+  "wandb_project": "airfrans-gnn",
+  "wandb_mode": "online",
+  "log_every_n_steps": -1,
+  "log_epoch_only": true
+}
+```
+
+</details>
+
+---
+
+### EXP_0003 — 2026-02-16 06:28:40 UTC
+
+**Model:** Ours | **Task:** scarce | **Parameters:** 143,172 | **Duration:** 3m 47s
+
+**Notes:** Training completed in 01_trainer.ipynb
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| finaltotal_loss | 1.0432 |
+| final_val_total_loss | 35.7508 |
+| best_val_total_loss | 35.7508 |
+| best_epoch | 29 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "seed": 42,
+  "task": "scarce",
+  "root": "Dataset",
+  "limit_train": 180,
+  "limit_val": 20,
+  "batch_size": 10,
+  "epochs": 30,
+  "hidden": 32,
+  "layers": 8,
+  "lr": 0.0004,
+  "weight_decay": 0.01,
+  "betas": [
+    0.9,
+    0.95
+  ],
+  "eps": 1e-08,
+  "amp": false,
+  "lr_scheduler": "cosine",
+  "cosine_T_max": 80,
+  "cosine_eta_min": 1e-06,
+  "wr_T_0": 10,
+  "wr_T_mult": 1,
+  "wr_eta_min": 1e-06,
+  "rop_factor": 0.5,
+  "rop_patience": 5,
+  "rop_min_lr": 1e-06,
+  "ramp_start_epoch": 40,
+  "ramp_epochs": 60,
+  "ramp_mode": "linear",
+  "data_loss_weight": 1.0,
+  "continuity_loss_weight": 0.05,
+  "continuity_target_weight": 0.2,
+  "momentum_loss_weight": 0.05,
+  "momentum_target_weight": 0.2,
+  "bc_loss_weight": 0.1,
+  "chord_length": 1.0,
+  "nu_molecular": 1.5e-05,
+  "dynamic_uref_from_data": true,
+  "dynamic_re_from_data": true,
+  "uinf_from": "inlet",
+  "use_huber_for_physics": true,
+  "huber_delta": 0.05,
+  "use_perimeter_norm_for_div": true,
+  "div_area_floor_factor": 0.25,
+  "div_min_degree": 2,
+  "physics_debug": false,
+  "physics_debug_level": 1,
+  "physics_debug_every": 50,
+  "use_global_tokens": true,
+  "num_global_tokens": 2,
+  "attention_heads": 2,
+  "attention_layers": 2,
+  "attention_dropout": 0.0,
+  "use_cross_attention": true,
+  "global_pooling_type": "attention",
+  "positional_encoding": false,
+  "pos_encoding_max_len": 50000,
+  "use_residual_attention": true,
+  "attention_normalization": "layer",
+  "temperature_scaling": false,
+  "attention_bias": false,
+  "use_wandb_artifacts": false,
+  "artifact_save_best_only": true,
+  "artifact_save_interval": 50,
+  "ckpt_dir": "checkpoints",
+  "ckpt_interval": 5,
+  "wandb_project": "airfrans-gnn",
+  "wandb_mode": "online",
+  "log_every_n_steps": -1,
+  "log_epoch_only": true
+}
+```
+
+</details>
+
+---
 
 ### EXP_0002 — 2026-02-16 03:34:39 UTC
 

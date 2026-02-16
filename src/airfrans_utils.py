@@ -475,7 +475,7 @@ def build_bc_masks_airfrans(
     else:
         # Ignore normals if they look unreliable (non-zero for a large fraction of nodes)
         is_wall = is_wall_from_dist
-    data.is_wall = is_wall.to(torch.uint8).to(device)
+    data.is_wall = is_wall.to(torch.bool).to(device)
 
     # wall normals: 제공 없으면 ∇(wall_dist)로 복구
     wall_normal = torch.zeros(N, 2, device=device)
@@ -517,9 +517,9 @@ def build_bc_masks_airfrans(
     is_outer_box = (xcoord <= x_lo) | (xcoord >= x_hi) | (ycoord <= y_lo) | (ycoord >= y_hi)
     is_farfield = is_outer_box & (~is_wall) & (~is_inlet) & (~is_outlet)
 
-    data.is_inlet = is_inlet.to(torch.uint8).to(device)
-    data.is_outlet = is_outlet.to(torch.uint8).to(device)
-    data.is_farfield = is_farfield.to(torch.uint8).to(device)
+    data.is_inlet = is_inlet.to(torch.bool).to(device)
+    data.is_outlet = is_outlet.to(torch.bool).to(device)
+    data.is_farfield = is_farfield.to(torch.bool).to(device)
 
     # inlet_u
     inlet_u = torch.zeros(N, 2, device=device, dtype=U_inf.dtype)

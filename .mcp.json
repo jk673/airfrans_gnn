@@ -5,7 +5,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "/home/chun/work/airfrans_gnn"
+        "/home/elicer/airfrans_gnn"
       ]
     },
     "jupyter": {
@@ -21,7 +21,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@context7/mcp-server"
+        "@upstash/context7-mcp"
       ]
     }
   }

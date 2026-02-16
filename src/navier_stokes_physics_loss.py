@@ -569,14 +569,10 @@ class NavierStokesPhysicsLoss(nn.Module):
         device = x.device
         mean = norm_params['mean']
         scale = norm_params.get('scale', norm_params.get('std', None))
-        if isinstance(mean, (list, tuple)):
-            mean = torch.tensor(mean, dtype=torch.float32, device=device)
-        elif not isinstance(mean, torch.Tensor):
-            mean = torch.tensor(mean, dtype=torch.float32, device=device)
-        if isinstance(scale, (list, tuple)):
-            scale = torch.tensor(scale, dtype=torch.float32, device=device)
-        elif not isinstance(scale, torch.Tensor):
-            scale = torch.tensor(scale, dtype=torch.float32, device=device)
+
+        mean = torch.as_tensor(mean, dtype=x.dtype, device=device)
+        scale = torch.as_tensor(scale, dtype=x.dtype, device=device)
+
         if x.ndim == 2 and mean.ndim == 1:
             mean = mean.unsqueeze(0)
             scale = scale.unsqueeze(0)
@@ -712,7 +708,12 @@ class NavierStokesPhysicsLoss(nn.Module):
         return self._quad_or_huber(torch.stack([res_u, res_v], dim=-1))
 
     # ---------- boundary conditions (optional) ----------
-    def _bc_loss(self, pred_scaled: torch.Tensor, data: Any) -> torch.Tensor:
+    def _bc_loss(
+        self,
+        pred_scaled: torch.Tensor,
+        data: Any,
+        Uref_local: Optional[float] = None
+    ) -> Dict[str, torch.Tensor]:
         """
         Soft BC penalties if masks exist in data:
         - is_wall: no-slip u=0
@@ -725,8 +726,18 @@ class NavierStokesPhysicsLoss(nn.Module):
         N = pred_scaled.size(0)
         u = pred_scaled[:, :2]
         p = pred_scaled[:, 2] if pred_scaled.size(1) >= 3 else torch.zeros(N, device=device)
+        U_ref = float(self.Uref) if Uref_local is None else float(Uref_local)
+        U_ref = max(U_ref, 1e-12)
+        scale_u = torch.as_tensor(U_ref, device=device, dtype=pred_scaled.dtype)
 
-        loss_terms = []
+        zero = torch.zeros((), device=device, dtype=pred_scaled.dtype)
+        bc_terms: Dict[str, torch.Tensor] = {
+            "bc_wall_loss": zero,
+            "bc_inlet_loss": zero,
+            "bc_farfield_loss": zero,
+            "bc_outlet_loss": zero,
+        }
+        bc_loss_terms = []
 
         # wall: no-slip
         is_wall = getattr(data, 'is_wall', None)
@@ -736,9 +747,17 @@ class NavierStokesPhysicsLoss(nn.Module):
                 # Check dimensions match (important for batched graphs)
                 if mask_w.size(0) != N:
                     print(f"Warning: is_wall mask size {mask_w.size(0)} != pred size {N}, skipping BC loss")
-                    return torch.zeros(1, device=device)
+                    return {
+                        "bc_loss": zero,
+                        "bc_wall_loss": zero,
+                        "bc_inlet_loss": zero,
+                        "bc_farfield_loss": zero,
+                        "bc_outlet_loss": zero,
+                    }
                 u_wall = u[mask_w]
-                loss_terms.append((u_wall ** 2).mean())
+                wall_loss = (u_wall ** 2).mean()
+                bc_terms["bc_wall_loss"] = wall_loss
+                bc_loss_terms.append(wall_loss)
 
         # inlet: velocity match (if inlet_u provided); else weak penalty to freestream (1,0)
         is_inlet = getattr(data, 'is_inlet', None)
@@ -747,7 +766,13 @@ class NavierStokesPhysicsLoss(nn.Module):
             if mask_in.any():
                 if mask_in.size(0) != N:
                     print(f"Warning: is_inlet mask size {mask_in.size(0)} != pred size {N}, skipping BC loss")
-                    return torch.zeros(1, device=device)
+                    return {
+                        "bc_loss": zero,
+                        "bc_wall_loss": bc_terms["bc_wall_loss"],
+                        "bc_inlet_loss": zero,
+                        "bc_farfield_loss": zero,
+                        "bc_outlet_loss": zero,
+                    }
                 u_inlet = u[mask_in]
                 n_inlet = mask_in.sum().item()
                 inlet_u = getattr(data, 'inlet_u', None)
@@ -756,24 +781,28 @@ class NavierStokesPhysicsLoss(nn.Module):
                     # Shape dispatch for various upstream formats
                     if inlet_u.shape[0] == n_inlet and inlet_u.dim() == 2:
                         # Already correctly sized [n_inlet, 2]
-                        inlet_u_target = inlet_u
+                        inlet_u_target = inlet_u / scale_u
                     elif inlet_u.shape[0] == N and inlet_u.dim() == 2:
                         # Full-graph size [N, 2] → filter by mask
-                        inlet_u_target = inlet_u[mask_in]
+                        inlet_u_target = inlet_u[mask_in] / scale_u
                     elif inlet_u.dim() == 1 and inlet_u.shape[0] == 2:
                         # Per-graph single vector [2] → broadcast
-                        inlet_u_target = inlet_u.unsqueeze(0).expand(n_inlet, -1)
+                        inlet_u_target = inlet_u.unsqueeze(0).expand(n_inlet, -1) / scale_u
                     else:
                         import warnings
                         warnings.warn(
                             f"inlet_u shape {tuple(inlet_u.shape)} unexpected for "
                             f"n_inlet={n_inlet}, N={N}; using (1,0) fallback"
                         )
-                        inlet_u_target = torch.tensor([[1.0, 0.0]], device=device).expand(n_inlet, -1)
-                    loss_terms.append(((u_inlet - inlet_u_target) ** 2).mean())
+                        inlet_u_target = torch.tensor([[1.0, 0.0]], device=device, dtype=u_inlet.dtype).expand(n_inlet, -1) / scale_u
+                    inlet_loss = ((u_inlet - inlet_u_target) ** 2).mean()
+                    bc_terms["bc_inlet_loss"] = inlet_loss
+                    bc_loss_terms.append(inlet_loss)
                 else:
-                    target = torch.tensor([[1.0, 0.0]], device=device).expand_as(u_inlet)
-                    loss_terms.append(0.1 * ((u_inlet - target) ** 2).mean())
+                    target = torch.tensor([[1.0, 0.0]], device=device, dtype=u_inlet.dtype).expand_as(u_inlet) / scale_u
+                    inlet_loss = 0.1 * ((u_inlet - target) ** 2).mean()
+                    bc_terms["bc_inlet_loss"] = inlet_loss
+                    bc_loss_terms.append(inlet_loss)
 
         # farfield: u≈U_inf and p≈0 (weak)
         is_far = getattr(data, 'is_farfield', None)
@@ -782,12 +811,19 @@ class NavierStokesPhysicsLoss(nn.Module):
             if mask_f.any():
                 if mask_f.size(0) != N:
                     print(f"Warning: is_farfield mask size {mask_f.size(0)} != pred size {N}, skipping BC loss")
-                    return torch.zeros(1, device=device)
+                    return {
+                        "bc_loss": zero,
+                        "bc_wall_loss": bc_terms["bc_wall_loss"],
+                        "bc_inlet_loss": bc_terms["bc_inlet_loss"],
+                        "bc_farfield_loss": zero,
+                        "bc_outlet_loss": zero,
+                    }
                 u_far = u[mask_f]
                 p_far = p[mask_f]
-                target_u = torch.tensor([[1.0, 0.0]], device=device).expand_as(u_far)
-                loss_terms.append(0.1 * ((u_far - target_u) ** 2).mean())
-                loss_terms.append(0.1 * (p_far ** 2).mean())
+                target_u = torch.tensor([[1.0, 0.0]], device=device, dtype=u_far.dtype).expand_as(u_far) / scale_u
+                farfield_loss = 0.1 * ((u_far - target_u) ** 2).mean() + 0.1 * (p_far ** 2).mean()
+                bc_terms["bc_farfield_loss"] = farfield_loss
+                bc_loss_terms.append(farfield_loss)
 
         # outlet: pressure pinning p≈0 (Dirichlet, not zero-gradient)
         is_out = getattr(data, 'is_outlet', None)
@@ -796,13 +832,22 @@ class NavierStokesPhysicsLoss(nn.Module):
             if mask_o.any():
                 if mask_o.size(0) != N:
                     print(f"Warning: is_outlet mask size {mask_o.size(0)} != pred size {N}, skipping BC loss")
-                    return torch.zeros(1, device=device)
+                    return {
+                        "bc_loss": zero,
+                        "bc_wall_loss": bc_terms["bc_wall_loss"],
+                        "bc_inlet_loss": bc_terms["bc_inlet_loss"],
+                        "bc_farfield_loss": bc_terms["bc_farfield_loss"],
+                        "bc_outlet_loss": zero,
+                    }
                 p_out = p[mask_o]
-                loss_terms.append((p_out ** 2).mean())
+                outlet_loss = (p_out ** 2).mean()
+                bc_terms["bc_outlet_loss"] = outlet_loss
+                bc_loss_terms.append(outlet_loss)
 
-        if len(loss_terms) == 0:
-            return torch.zeros(1, device=device)
-        return torch.stack(loss_terms).mean()
+        bc_terms["bc_loss"] = (
+            torch.stack(bc_loss_terms).mean() if bc_loss_terms else zero
+        )
+        return bc_terms
 
     # ---------- curriculum ramp ----------
     def _ramp(self, step_or_epoch: Optional[int]) -> float:
@@ -887,14 +932,31 @@ class NavierStokesPhysicsLoss(nn.Module):
                 print(f"[physics] momentum skipped: {e}")
             try:
                 if self.bc_w > 0.0:
-                    bc_loss = self._bc_loss(pred_scaled, data)
+                    bc_info = self._bc_loss(pred_scaled, data, Uref_local)
+                    if isinstance(bc_info, dict):
+                        bc_loss = bc_info.get("bc_loss", torch.zeros((), device=device))
+                        losses["bc_loss"] = bc_loss
+                        losses.update(bc_info)
+                    else:
+                        bc_loss = bc_info
+                        losses["bc_loss"] = bc_loss
+                        losses["bc_wall_loss"] = torch.tensor(0.0, device=device)
+                        losses["bc_inlet_loss"] = torch.tensor(0.0, device=device)
+                        losses["bc_outlet_loss"] = torch.tensor(0.0, device=device)
+                        losses["bc_farfield_loss"] = torch.tensor(0.0, device=device)
             except Exception as e:
                 print(f"[physics] bc loss skipped: {e}")
 
         losses["continuity_loss"] = cont_loss
         losses["momentum_loss"] = mom_loss
         if self.bc_w > 0.0:
-            losses["bc_loss"] = bc_loss
+            losses.setdefault("bc_loss", bc_loss)
+            losses.setdefault("bc_wall_loss", torch.tensor(0.0, device=device))
+            losses.setdefault("bc_inlet_loss", torch.tensor(0.0, device=device))
+            losses.setdefault("bc_outlet_loss", torch.tensor(0.0, device=device))
+            losses.setdefault("bc_farfield_loss", torch.tensor(0.0, device=device))
+        if self.bc_w <= 0.0:
+            losses["bc_loss"] = torch.tensor(0.0, device=device)
 
         # 6) Curriculum ramp
         cont_steps = self.cont_curr_steps if self.cont_curr_steps >= 0 else self.curr_steps

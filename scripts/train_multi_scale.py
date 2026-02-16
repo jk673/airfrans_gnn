@@ -391,6 +391,10 @@ def main():
     os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
     scfg = SmokeCfg()
+    env_wandb = os.getenv("AIRFRANS_ENABLE_WANDB", "").strip().lower()
+    scfg.enable_wandb = env_wandb not in {"0", "false", "f", "off", "no"}
+    if not scfg.enable_wandb:
+        print("[wandb] disabled (set AIRFRANS_ENABLE_WANDB=1 to enable)")
     set_seed(scfg.seed)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'PyTorch: {torch.__version__} | CUDA: {torch.cuda.is_available()} | Device: {device}')

@@ -30,12 +30,19 @@ import argparse
 import os
 import math
 import gc
+import time
+import sys
 from dataclasses import asdict
+from pathlib import Path
 from datetime import datetime
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import numpy as np
 import torch
 from torch_geometric.data import Data
+from torch.utils.data import DataLoader
 from matplotlib.tri import Triangulation
 from matplotlib.path import Path
 import matplotlib.pyplot as plt
@@ -43,13 +50,18 @@ import wandb
 
 from src.training_common import (
     SmokeCfg, DataBundle,
+    apply_config_dict,
+    DEFAULT_CONFIG_PATH,
     set_seed, get_lr,
     load_and_prepare_data,
+    load_config_file,
     run_epoch, train_epoch, create_lr_scheduler, init_wandb,
 )
+from experiment_tracker import ExperimentTracker
+
 from src.navier_stokes_physics_loss import NavierStokesPhysicsLoss
 from src.global_context_processor import EnhancedCFDModelWithGlobalContext
-from src.utils import get_surface_mask, with_pos2, ensure_edge_features
+from src.utils import get_surface_mask, with_pos2, ensure_edge_features, _prep_graph_for_norm
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +73,9 @@ def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
     scaler = torch.amp.GradScaler('cuda', enabled=(scfg.amp and torch.cuda.is_available()))  # type: ignore[attr-defined]
     global_step = 0
     best_val = float('inf')
+    best_epoch = -1
+    final_train_total = float('nan')
+    final_val_total = float('nan')
 
     USE_WANDB_ARTIFACTS = getattr(scfg, "use_wandb_artifacts", False)
     ARTIFACT_SAVE_BEST_ONLY = getattr(scfg, "artifact_save_best_only", True)
@@ -88,6 +103,8 @@ def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
             amp_enabled=scfg.amp,
             loss_fn=physics_loss_fn,
         )
+        final_train_total = float(train_total)
+        final_val_total = float(val_total)
 
         # W&B epoch-level logging
         log_epoch = {
@@ -126,6 +143,7 @@ def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
         is_best = val_total < best_val
         if is_best:
             best_val = val_total
+            best_epoch = epoch
             best_path = os.path.join(ckpt_dir, "best.pt")
             torch.save({
                 "model": model.state_dict(),
@@ -189,7 +207,101 @@ def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
               f" {'[BEST]' if is_best else ''}")
 
     wandb.finish()
-    return {'best_val': best_val, 'artifacts_uploaded': artifact_history['total_artifacts']}
+    return {
+        'best_val': best_val,
+        'best_epoch': best_epoch,
+        'final_train_loss': final_train_total,
+        'final_val_loss': final_val_total,
+        'artifacts_uploaded': artifact_history['total_artifacts'],
+    }
+
+
+def run_benchmark_and_log_experiment(
+    model,
+    data_bundle: DataBundle,
+    scfg,
+    device,
+    train_summary: dict,
+    training_duration_sec: float,
+    notes: str | None = None,
+    tracker: ExperimentTracker | None = None,
+):
+    """Compute FLOW-GLIDE benchmark metrics and append to experiments/EXPERIMENT_LOG.md."""
+    from scripts.score_benchmark import score_test_set
+    tracker = tracker or ExperimentTracker(
+        log_dir="experiments",
+        project_name="AirfRANS 2D Airfoil - GNN Surrogate",
+        reference_path="benchmark/benchmark_reference.json",
+    )
+
+    try:
+        test_graphs = data_bundle.val_graphs
+        if not isinstance(test_graphs, list) or len(test_graphs) == 0:
+            print("[experiment log] No test graphs found in data_bundle.val_graphs; skipping experiment log.")
+            return None
+
+        test_prepped = [_prep_graph_for_norm(g) for g in test_graphs]
+        test_ds = NormalizedDataset(test_prepped, data_bundle.x_scaler, data_bundle.y_scaler)
+        test_loader = DataLoader(
+            test_ds,
+            batch_size=1,
+            shuffle=False,
+            num_workers=0,
+            collate_fn=collate_pyg,
+        )
+
+        benchmark_metrics = score_test_set(
+            test_loader,
+            model,
+            data_bundle.x_scaler,
+            data_bundle.y_scaler,
+            device,
+            verbose=False,
+        )
+    except Exception as exc:
+        print(f"[experiment log] Benchmark scoring failed: {exc}")
+        return None
+
+    run_config = asdict(scfg)
+    train_metrics = {
+        "status": "completed",
+        "best_val_loss": train_summary.get("best_val", float("nan")),
+        "best_epoch": train_summary.get("best_epoch", -1),
+        "final_train_loss": train_summary.get("final_train_loss", float("nan")),
+        "final_val_loss": train_summary.get("final_val_loss", float("nan")),
+        "artifacts_uploaded": train_summary.get("artifacts_uploaded", 0),
+    }
+
+    model_name = (
+        getattr(scfg, "wandb_name", None)
+        or getattr(scfg, "wandb_run_name", None)
+        or f"{scfg.task}-h{scfg.hidden}-l{scfg.layers}"
+    )
+
+    try:
+        exp_id = tracker.log_experiment(
+            config=run_config,
+            metrics=train_metrics,
+            model=model,
+            model_name=model_name,
+            notes=notes or "",
+            duration_sec=float(training_duration_sec),
+            benchmark_metrics=benchmark_metrics,
+        )
+    except Exception as exc:
+        print(f"[experiment log] Experiment tracker write failed: {exc}")
+        return None
+
+    print(f"[experiment log] Logged experiment {exp_id} -> experiments/EXPERIMENT_LOG.md")
+    print(f"[experiment log] Benchmark metrics: "
+          f"volume_rel_l2={benchmark_metrics.get('volume_rel_l2', float('nan')):.4f}, "
+          f"surface_rel_l2={benchmark_metrics.get('surface_rel_l2', float('nan')):.4f}, "
+          f"cd_relative_error={benchmark_metrics.get('cd_relative_error', float('nan')):.4f}, "
+          f"cl_relative_error={benchmark_metrics.get('cl_relative_error', float('nan')):.4f}, "
+          f"rho_d={benchmark_metrics.get('rho_d', float('nan')):.4f}, "
+          f"rho_l={benchmark_metrics.get('rho_l', float('nan')):.4f}")
+
+    return exp_id
 
 
 # ---------------------------------------------------------------------------
@@ -504,7 +616,7 @@ def compute_force_coefficients_local(data: Data, eps=1e-9):
 # CLI argument parsing
 # ---------------------------------------------------------------------------
 
-def parse_args():
+def parse_args(argv=None):
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
         description='Train AirfRANS GNN model with physics-informed loss',
@@ -619,6 +731,11 @@ def parse_args():
     parser.add_argument('--wandb-mode', type=str, default='online',
                         choices=['online', 'offline', 'disabled'],
                         help='W&B logging mode')
+    parser.add_argument('--enable-wandb', dest='enable_wandb', action='store_true',
+                        help='Enable W&B logging')
+    parser.add_argument('--disable-wandb', dest='enable_wandb', action='store_false',
+                        help='Disable W&B logging')
+    parser.set_defaults(enable_wandb=False)
     parser.add_argument('--wandb-tags', type=str, nargs='+', default=None,
                         help='W&B tags for this run')
     parser.add_argument('--use-wandb-artifacts', action='store_true', default=False,
@@ -633,78 +750,36 @@ def parse_args():
                         help='Log to W&B every N steps (-1 for epoch-only)')
     parser.add_argument('--no-viz', action='store_true', default=False,
                         help='Skip visualization at the end of training')
+    parser.add_argument(
+        '--config',
+        type=str,
+        default=os.environ.get("AIRFRANS_TRAIN_CONFIG", str(DEFAULT_CONFIG_PATH)),
+        help=f'Path to JSON config file (defaults to {DEFAULT_CONFIG_PATH})'
+    )
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def create_config_from_args(args):
     """Create SmokeCfg from command line arguments"""
+    parser_defaults = vars(parse_args([]))
     cfg = SmokeCfg()
+    for key, value in parser_defaults.items():
+        if hasattr(cfg, key):
+            setattr(cfg, key, value)
 
-    # Update config with CLI arguments
-    cfg.seed = args.seed
-    cfg.task = args.task
-    cfg.root = args.root
-    if args.limit_train is not None:
-        cfg.limit_train = args.limit_train
-    if args.limit_val is not None:
-        cfg.limit_val = args.limit_val
+    apply_config_dict(cfg, load_config_file(getattr(args, 'config', None)))
 
-    # Model architecture
-    cfg.hidden = args.hidden
-    cfg.layers = args.layers
-
-    # Global context
-    cfg.use_global_tokens = args.use_global_tokens
-    cfg.num_global_tokens = args.num_global_tokens
-    cfg.attention_heads = args.attention_heads
-    cfg.attention_layers = args.attention_layers
-    cfg.attention_dropout = args.attention_dropout
-    cfg.use_cross_attention = args.use_cross_attention
-    cfg.global_pooling_type = args.global_pooling_type
-
-    # Training
-    cfg.batch_size = args.batch_size
-    cfg.epochs = args.epochs
-    cfg.lr = args.lr
-    cfg.weight_decay = args.weight_decay
-    cfg.amp = args.amp
-
-    # LR scheduler
-    cfg.lr_scheduler = '' if args.lr_scheduler == 'none' else args.lr_scheduler
-    cfg.cosine_T_max = args.cosine_T_max
-    cfg.cosine_eta_min = args.cosine_eta_min
-
-    # Physics loss
-    cfg.data_loss_weight = args.data_loss_weight
-    cfg.continuity_loss_weight = args.continuity_loss_weight
-    cfg.continuity_target_weight = args.continuity_target_weight
-    cfg.momentum_loss_weight = args.momentum_loss_weight
-    cfg.momentum_target_weight = args.momentum_target_weight
-    cfg.bc_loss_weight = args.bc_loss_weight
-    cfg.ramp_start_epoch = args.ramp_start_epoch
-    cfg.ramp_epochs = args.ramp_epochs
-    cfg.ramp_mode = args.ramp_mode
-
-    # Physics parameters
-    cfg.chord_length = args.chord_length
-    cfg.nu_molecular = args.nu_molecular
-    cfg.dynamic_uref_from_data = args.dynamic_uref
-    cfg.dynamic_re_from_data = args.dynamic_re
-    cfg.use_huber_for_physics = args.use_huber_physics
-    cfg.huber_delta = args.huber_delta
-
-    # Checkpointing
-    cfg.ckpt_dir = args.ckpt_dir
-    cfg.ckpt_interval = args.ckpt_interval
-
-    # W&B
-    cfg.wandb_project = args.wandb_project
-    cfg.wandb_name = args.wandb_name
-    cfg.wandb_mode = args.wandb_mode
-    cfg.wandb_tags = args.wandb_tags
-    cfg.use_wandb_artifacts = args.use_wandb_artifacts
-    cfg.log_every_n_steps = args.log_every_n_steps
+    arg_values = vars(args)
+    for key, value in arg_values.items():
+        if key == 'config' or not hasattr(cfg, key):
+            continue
+        if key in {'limit_train', 'limit_val'} and value is None:
+            continue
+        if value != parser_defaults.get(key):
+            if key == 'lr_scheduler':
+                value = None if value in ('', 'none', 'None') else value
+            setattr(cfg, key, value)
 
     return cfg
 
@@ -740,6 +815,7 @@ def main():
     print(f'Global tokens: {scfg.use_global_tokens} (num={scfg.num_global_tokens})')
     print(f'LR scheduler: {scfg.lr_scheduler}')
     print('=' * 80)
+    training_start = time.time()
 
     # --- Data ---
     data_bundle = load_and_prepare_data(scfg)
@@ -758,7 +834,7 @@ def main():
         hidden_dim=scfg.hidden,
         output_dim=4,
         num_mp_layers=scfg.layers,
-        dropout_p=0.1,
+        dropout_p=scfg.dropout,
         config=scfg,
     ).to(device)
 
@@ -804,11 +880,12 @@ def main():
     init_wandb(scfg, loss_fn)
 
     # --- Train ---
-    train_with_scheduler(
+    train_summary = train_with_scheduler(
         model, optimizer, lr_scheduler,
         data_bundle.train_loader, data_bundle.val_loader,
         scfg, device, loss_fn,
     )
+    training_duration = time.time() - training_start
 
     # --- Evaluate ---
     evaluate_model(model, device, data_bundle, scfg)
@@ -826,6 +903,17 @@ def main():
                 data_bundle.y_scaler, data_bundle.x_scaler,
                 channel=2, show_mesh=False, denormalize=True,
             )
+
+    # --- Benchmark + experiment tracker ---
+    run_benchmark_and_log_experiment(
+        model=model,
+        data_bundle=data_bundle,
+        scfg=scfg,
+        device=device,
+        train_summary=train_summary,
+        training_duration_sec=training_duration,
+        notes=f"task={scfg.task}, hidden={scfg.hidden}, layers={scfg.layers}, lr={scfg.lr}, scheduler={scfg.lr_scheduler}",
+    )
 
     print('\n' + '=' * 80)
     print('Training complete!')

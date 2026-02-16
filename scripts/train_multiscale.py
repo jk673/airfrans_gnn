@@ -38,11 +38,14 @@ import wandb
 
 from src.training_common import (
     SmokeCfg,
+    apply_config_dict,
+    DEFAULT_CONFIG_PATH,
     set_seed,
     get_lr,
     load_and_prepare_data,
     run_epoch,
     train_epoch,
+    load_config_file,
     create_lr_scheduler,
     init_wandb,
 )
@@ -83,84 +86,24 @@ class MultiScaleCfg(SmokeCfg):
 
 def create_multiscale_config_from_args(args):
     """Create MultiScaleCfg from command line arguments"""
+    parser_defaults = vars(parse_args([]))
     cfg = MultiScaleCfg()
+    for key, value in parser_defaults.items():
+        if hasattr(cfg, key):
+            setattr(cfg, key, value)
 
-    # Update config with CLI arguments (same as train.py)
-    cfg.seed = args.seed
-    cfg.task = args.task
-    cfg.root = args.root
-    if args.limit_train is not None:
-        cfg.limit_train = args.limit_train
-    if args.limit_val is not None:
-        cfg.limit_val = args.limit_val
+    apply_config_dict(cfg, load_config_file(getattr(args, 'config', None)))
 
-    # Model architecture
-    cfg.hidden = args.hidden
-    cfg.layers = args.layers
-
-    # Multi-scale specific
-    cfg.num_scales = args.num_scales
-    cfg.num_multiscale_layers = args.num_multiscale_layers
-    cfg.use_spatial_pyramid_pooling = args.use_spp
-
-    # Global context
-    cfg.use_global_tokens = args.use_global_tokens
-    cfg.num_global_tokens = args.num_global_tokens
-    cfg.attention_heads = args.attention_heads
-    cfg.attention_layers = args.attention_layers
-    cfg.attention_dropout = args.attention_dropout
-    cfg.use_cross_attention = args.use_cross_attention
-    cfg.global_pooling_type = args.global_pooling_type
-
-    # Training
-    cfg.batch_size = args.batch_size
-    cfg.epochs = args.epochs
-    cfg.lr = args.lr
-    cfg.weight_decay = args.weight_decay
-    cfg.amp = args.amp
-
-    # LR scheduler
-    cfg.lr_scheduler = None if args.lr_scheduler == 'none' else args.lr_scheduler
-    cfg.cosine_T_max = args.cosine_T_max
-    cfg.cosine_eta_min = args.cosine_eta_min
-
-    # Physics loss
-    cfg.data_loss_weight = args.data_loss_weight
-    cfg.continuity_loss_weight = args.continuity_loss_weight
-    cfg.continuity_target_weight = args.continuity_target_weight
-    cfg.momentum_loss_weight = args.momentum_loss_weight
-    cfg.momentum_target_weight = args.momentum_target_weight
-    cfg.bc_loss_weight = args.bc_loss_weight
-    cfg.ramp_start_epoch = args.ramp_start_epoch
-    cfg.ramp_epochs = args.ramp_epochs
-    cfg.ramp_mode = args.ramp_mode
-
-    # Turbulence modeling (multi-scale specific)
-    cfg.turbulence_loss_weight = args.turbulence_loss_weight
-    cfg.rans_loss_weight = args.rans_loss_weight
-    cfg.smoothness_weight = args.smoothness_weight
-    cfg.wall_function_weight = args.wall_function_weight
-    cfg.use_adaptive_weights = args.use_adaptive_weights
-
-    # Physics parameters
-    cfg.chord_length = args.chord_length
-    cfg.nu_molecular = args.nu_molecular
-    cfg.dynamic_uref_from_data = args.dynamic_uref
-    cfg.dynamic_re_from_data = args.dynamic_re
-    cfg.use_huber_for_physics = args.use_huber_physics
-    cfg.huber_delta = args.huber_delta
-
-    # Checkpointing
-    cfg.ckpt_dir = args.ckpt_dir
-    cfg.ckpt_interval = args.ckpt_interval
-
-    # W&B
-    cfg.wandb_project = args.wandb_project
-    cfg.wandb_run_name = args.wandb_name
-    cfg.wandb_mode = args.wandb_mode
-    cfg.wandb_tags = args.wandb_tags
-    cfg.use_wandb_artifacts = args.use_wandb_artifacts
-    cfg.log_every_n_steps = args.log_every_n_steps
+    arg_values = vars(args)
+    for key, value in arg_values.items():
+        if key == 'config' or not hasattr(cfg, key):
+            continue
+        if key in {'limit_train', 'limit_val'} and value is None:
+            continue
+        if value != parser_defaults.get(key):
+            if key == 'lr_scheduler':
+                value = None if value in ('', 'none', 'None') else value
+            setattr(cfg, key, value)
 
     return cfg
 
@@ -306,6 +249,11 @@ def parse_args():
     parser.add_argument('--wandb-mode', type=str, default='online',
                         choices=['online', 'offline', 'disabled'],
                         help='W&B logging mode')
+    parser.add_argument('--enable-wandb', dest='enable_wandb', action='store_true',
+                        help='Enable W&B logging')
+    parser.add_argument('--disable-wandb', dest='enable_wandb', action='store_false',
+                        help='Disable W&B logging')
+    parser.set_defaults(enable_wandb=True)
     parser.add_argument('--wandb-tags', type=str, nargs='+', default=['multiscale'],
                         help='W&B tags for this run')
     parser.add_argument('--use-wandb-artifacts', action='store_true', default=False,
@@ -320,6 +268,12 @@ def parse_args():
                         help='Log to W&B every N steps (-1 for epoch-only)')
     parser.add_argument('--no-viz', action='store_true', default=False,
                         help='Skip visualization at the end of training')
+    parser.add_argument(
+        '--config',
+        type=str,
+        default=os.environ.get("AIRFRANS_TRAIN_CONFIG", str(DEFAULT_CONFIG_PATH)),
+        help=f'Path to JSON config file (defaults to {DEFAULT_CONFIG_PATH})'
+    )
 
     return parser.parse_args()
 
@@ -375,7 +329,7 @@ def main():
         output_dim=4,
         num_mp_layers=scfg.layers,
         num_scales=scfg.num_scales,
-        dropout_p=0.1,
+        dropout_p=scfg.dropout,
         config=scfg,
     ).to(device)
 
