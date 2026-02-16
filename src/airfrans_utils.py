@@ -456,25 +456,29 @@ def build_bc_masks_airfrans(
     else:
         nx_ny = torch.zeros(N, 2, device=device)
 
-    # is_wall
-    is_wall_from_dist = (wall_dist <= wall_dist_thresh)
-    if have_normals and not normals_unreliable:
-        # Only consider normals very close to the wall; be conservative
-        near_thresh = torch.minimum(
-            torch.as_tensor(wall_dist_thresh * 100.0, device=device, dtype=wall_dist.dtype),
-            torch.quantile(wall_dist, 0.05)
-        )
-        is_wall_from_norm = (nx_ny.abs().sum(dim=1) > 0) & (wall_dist <= near_thresh)
-        candidate = is_wall_from_dist | is_wall_from_norm
-        # Sanity fallback: if normals cause >80% nodes to be wall, ignore normals
-        frac = candidate.float().mean()
-        if frac.item() > 0.8:
-            is_wall = is_wall_from_dist
-        else:
-            is_wall = candidate
+    # is_wall: prefer data.surf (ground-truth surface mask from AirfRANS) if available
+    surf = getattr(data, 'surf', None)
+    if surf is not None and isinstance(surf, torch.Tensor) and surf.dtype == torch.bool and surf.numel() == N:
+        is_wall = surf.view(-1).to(device)
     else:
-        # Ignore normals if they look unreliable (non-zero for a large fraction of nodes)
-        is_wall = is_wall_from_dist
+        is_wall_from_dist = (wall_dist <= wall_dist_thresh)
+        if have_normals and not normals_unreliable:
+            # Only consider normals very close to the wall; be conservative
+            near_thresh = torch.minimum(
+                torch.as_tensor(wall_dist_thresh * 100.0, device=device, dtype=wall_dist.dtype),
+                torch.quantile(wall_dist, 0.05)
+            )
+            is_wall_from_norm = (nx_ny.abs().sum(dim=1) > 0) & (wall_dist <= near_thresh)
+            candidate = is_wall_from_dist | is_wall_from_norm
+            # Sanity fallback: if normals cause >80% nodes to be wall, ignore normals
+            frac = candidate.float().mean()
+            if frac.item() > 0.8:
+                is_wall = is_wall_from_dist
+            else:
+                is_wall = candidate
+        else:
+            # Ignore normals if they look unreliable (non-zero for a large fraction of nodes)
+            is_wall = is_wall_from_dist
     data.is_wall = is_wall.to(torch.bool).to(device)
 
     # wall normals: 제공 없으면 ∇(wall_dist)로 복구

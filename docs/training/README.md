@@ -163,6 +163,13 @@ The script will:
 8. Evaluate the model on validation data
 9. Generate visualization plots (unless `--no-viz` is specified)
 
+### Evaluation metrics (FLOW-GLIDE)
+
+After training, `scripts/train.py` evaluates the model with FLOW-GLIDE benchmark metrics:
+`volume_rel_l2`, `surface_rel_l2`, `cd_relative_error`, `cl_relative_error`, `rho_D`, `rho_L`.
+
+See: [FLOW-GLIDE Metrics Guide](./FLOW_GLIDE_METRICS.md)
+
 ### Checkpoints
 
 Checkpoints are saved to the directory specified by `--ckpt-dir` (default: `checkpoints/`):

@@ -121,6 +121,10 @@ def run(cfg: 'EdgeConfig'):
                     d2.edge_index = d2.edge_index.long()
                 # Bake BC masks into the graph so all downstream code has them
                 d2 = build_bc_masks_airfrans(d2)
+                _N = d2.num_nodes
+                _wall_n = int(getattr(d2, 'is_wall', torch.zeros(0)).sum())
+                if _wall_n == 0:
+                    print(f'[bc] WARNING: {fn} has 0 wall nodes out of {_N}')
                 orig_idx = None
                 try:
                     oi = getattr(d, 'orig_index', None)
@@ -134,6 +138,13 @@ def run(cfg: 'EdgeConfig'):
             except Exception as e:
                 print(f'[edge] failed for {path}: {e}')
         print(f'Saved edges for {split}: {saved} files in {dst}')
+        # BC mask summary: verify masks were baked into saved graphs
+        _bc_check_files = sorted([f for f in os.listdir(dst) if f.startswith('graph_') and f.endswith('.pt')])[:3]
+        for _cf in _bc_check_files:
+            _cg = torch.load(os.path.join(dst, _cf), map_location='cpu', weights_only=False)
+            _cn = _cg.num_nodes
+            _masks = {k: int(getattr(_cg, k, torch.zeros(0)).sum()) for k in ['is_wall', 'is_inlet', 'is_outlet', 'is_farfield']}
+            print(f'  [bc verify] {_cf}: N={_cn} {_masks}')
 
 
 def main():

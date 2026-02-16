@@ -19,6 +19,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_add
+from src.airfrans_utils import _valid_edges
 
 
 
@@ -33,11 +34,6 @@ def _half_edges(edge_index: torch.Tensor, edge_attr: Optional[torch.Tensor] = No
         if edge_attr is not None:
             edge_attr = edge_attr[mask]
     return edge_index, edge_attr
-
-
-def _valid_edges(edge_index: torch.Tensor, N: int) -> torch.Tensor:
-    row, col = edge_index
-    return (row >= 0) & (row < N) & (col >= 0) & (col < N)
 
 
 def _extract_dxdy_length(

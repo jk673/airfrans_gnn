@@ -24,6 +24,7 @@ try:
     import psutil
 except ImportError:
     psutil = None
+from src.preprocess_airfrans_edges import hash_pos, mem_usage_percent, parse_aoa_from_name
 
 SURF_KEY_NAME = 'surf'
 EDGE_FEAT_DIM = 5
@@ -68,11 +69,6 @@ class Params:
     max_isolated_fraction: float = 0.01
     max_low_degree_fraction: float = 0.05
     qa_fail_fast: bool = False
-
-
-def hash_pos(pos: torch.Tensor) -> str:
-    with torch.no_grad():
-        return hashlib.sha1(pos.detach().cpu().numpy().tobytes()).hexdigest()[:16]
 
 
 def _undirected_degree(edge_index: torch.Tensor, num_nodes: int) -> torch.Tensor:
@@ -385,22 +381,6 @@ def build_edges_for_graph(data: Data, p: Params) -> tuple[Data, Dict[str, Any]]:
 # CLI & batch processing (mostly unchanged from V1)
 # ============================================================
 
-def parse_aoa_from_name(name: str, index: int) -> Optional[float]:
-    parts = name.split('_')
-    nums = []
-    for tok in parts:
-        try:
-            nums.append(float(tok))
-        except ValueError:
-            continue
-    if not nums:
-        matches = AOA_REGEX.findall(name)
-        nums = [float(m) for m in matches]
-    if len(nums) > index:
-        return nums[index]
-    return None
-
-
 def process_one(idx: int, split: str, output_dir: str, rebuild: bool, params: Params,
                 dataset_train: AirfRANS, dataset_test: Optional[AirfRANS]) -> Dict[str, Any]:
     dataset = dataset_train if split == 'train' else dataset_test
@@ -431,15 +411,6 @@ def process_one(idx: int, split: str, output_dir: str, rebuild: bool, params: Pa
     d.edge_attr = None
     d.edge_meta = None
     return {'status': 'built', 'idx': idx, 'qa': qa}
-
-
-def mem_usage_percent() -> Optional[float]:
-    if psutil is None:
-        return None
-    try:
-        return psutil.virtual_memory().percent
-    except Exception:
-        return None
 
 
 def process_indices_sequential(indices: List[int], split: str, params: Params,

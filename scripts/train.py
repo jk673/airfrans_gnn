@@ -32,6 +32,7 @@ import math
 import gc
 import time
 import sys
+import json
 from dataclasses import asdict
 from pathlib import Path
 from datetime import datetime
@@ -44,7 +45,7 @@ import torch
 from torch_geometric.data import Data
 from torch.utils.data import DataLoader
 from matplotlib.tri import Triangulation
-from matplotlib.path import Path
+from matplotlib.path import Path as MplPath
 import matplotlib.pyplot as plt
 import wandb
 
@@ -56,12 +57,229 @@ from src.training_common import (
     load_and_prepare_data,
     load_config_file,
     run_epoch, train_epoch, create_lr_scheduler, init_wandb,
+    NormalizedDataset, collate_pyg,
 )
 from experiment_tracker import ExperimentTracker
 
 from src.navier_stokes_physics_loss import NavierStokesPhysicsLoss
 from src.global_context_processor import EnhancedCFDModelWithGlobalContext
 from src.utils import get_surface_mask, with_pos2, ensure_edge_features, _prep_graph_for_norm
+
+
+# FLOW-GLIDE style comparison table that is stored independently from EXPERIMENT_LOG
+FLOW_GLIDE_TABLE_PATH = PROJECT_ROOT / "experiments/flow_glide_comparison_table.md"
+FLOW_GLIDE_METRIC_KEYS = [
+    "volume_rel_l2",
+    "surface_rel_l2",
+    "cd_relative_error",
+    "cl_relative_error",
+    "rho_d",
+    "rho_l",
+]
+FLOW_GLIDE_METRIC_HEADERS = [
+    "Volume Rel.L₂ ↓",
+    "Surface Rel.L₂ ↓",
+    "CD Rel.Err ↓",
+    "CL Rel.Err ↓",
+    "ρ_D ↑",
+    "ρ_L ↑",
+]
+FLOW_GLIDE_REFERENCE_PATH = PROJECT_ROOT / "benchmark/benchmark_reference.json"
+LOSS_SIGNALS_DIR = PROJECT_ROOT / "experiments" / "loss_signals"
+LOSS_SIGNALS_PLOT_PATH = LOSS_SIGNALS_DIR / "loss_signals_epoch_vs_loss.png"
+LOSS_SIGNAL_KEYS = (
+    "total_loss",
+    "mse_loss",
+    "continuity_loss",
+    "momentum_loss",
+    "bc_loss",
+    "bc_wall_loss",
+    "bc_inlet_loss",
+    "bc_outlet_loss",
+    "bc_farfield_loss",
+)
+LOSS_SIGNAL_LABELS = {
+    "total_loss": "Total Loss",
+    "mse_loss": "MSE Loss",
+    "continuity_loss": "Continuity Loss",
+    "momentum_loss": "Momentum Loss",
+    "bc_loss": "Boundary Condition Loss",
+    "bc_wall_loss": "BC Wall Loss",
+    "bc_inlet_loss": "BC Inlet Loss",
+    "bc_outlet_loss": "BC Outlet Loss",
+    "bc_farfield_loss": "BC Farfield Loss",
+}
+
+
+def _fmt_table_value(v):
+    if v is None:
+        return "N/A"
+    if isinstance(v, float):
+        if v != v:
+            return "N/A"
+        return f"{v:.4f}"
+    return str(v)
+
+
+def _format_experiment_id_for_table(exp_id: str) -> str:
+    if exp_id.startswith("EXP_") and len(exp_id) > 4:
+        n = exp_id.split("_", 1)[1]
+        if n.isdigit():
+            return f"EXP{int(n):03d}"
+    return exp_id
+
+
+def _load_flow_glide_baselines() -> dict:
+    if not FLOW_GLIDE_REFERENCE_PATH.exists():
+        return {}
+    try:
+        with open(FLOW_GLIDE_REFERENCE_PATH, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        baselines = payload.get("baselines", {})
+        return {
+            "Transolver": baselines.get("Transolver", {}),
+            "FLOW-GLIDE": baselines.get("FLOW-GLIDE", {}),
+        }
+    except Exception:
+        return {}
+
+
+def _collect_flow_glide_experiments():
+    rows = []
+    results_dir = PROJECT_ROOT / "experiments" / "results"
+    if not results_dir.exists():
+        return rows
+
+    for p in sorted(results_dir.glob("EXP_*.json")):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        if not all(
+            isinstance(data.get(k), (int, float)) and not (isinstance(data.get(k), float) and np.isnan(data.get(k)))
+            for k in FLOW_GLIDE_METRIC_KEYS
+        ):
+            continue
+        exp_id = data.get("_experiment_id", p.stem)
+        vals = [data.get(k, float("nan")) for k in FLOW_GLIDE_METRIC_KEYS]
+        rows.append((_format_experiment_id_for_table(exp_id), vals))
+    return rows
+
+
+def _update_flow_glide_comparison_table() -> None:
+    FLOW_GLIDE_TABLE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    header_cols = " | ".join(FLOW_GLIDE_METRIC_HEADERS)
+    lines = [
+        "============================================================",
+        "FLOW-GLIDE Comparison Table",
+        "============================================================",
+        f"| Model | {header_cols} |",
+        "|---|---|---|---|---|---|---|",
+    ]
+
+    baselines = _load_flow_glide_baselines()
+    if "Transolver" in baselines:
+        base_vals = [baselines["Transolver"].get(k, float("nan")) for k in FLOW_GLIDE_METRIC_KEYS]
+        lines.append(f"| Transolver | {' | '.join(_fmt_table_value(v) for v in base_vals)} |")
+    if "FLOW-GLIDE" in baselines:
+        base_vals = [baselines["FLOW-GLIDE"].get(k, float("nan")) for k in FLOW_GLIDE_METRIC_KEYS]
+        lines.append(f"| FLOW-GLIDE | {' | '.join(_fmt_table_value(v) for v in base_vals)} |")
+
+    for exp_id, vals in _collect_flow_glide_experiments():
+        lines.append(f"| {exp_id} | {' | '.join(_fmt_table_value(v) for v in vals)} |")
+
+    with open(FLOW_GLIDE_TABLE_PATH, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def _safe_float_loss_value(v) -> float:
+    if isinstance(v, torch.Tensor):
+        if v.numel() != 1:
+            return float("nan")
+        v = v.item()
+    try:
+        fv = float(v)
+    except Exception:
+        return float("nan")
+    if isinstance(fv, float) and not (fv == fv):
+        return float("nan")
+    return fv
+
+
+def _append_loss_history(loss_history: dict, loss_type: str, logs: dict, step: int):
+    values = {}
+    for key in LOSS_SIGNAL_KEYS:
+        values[key] = _safe_float_loss_value(logs.get(key, float("nan")))
+    loss_history[loss_type]["epoch"].append(step)
+    for key, value in values.items():
+        loss_history[loss_type][key].append(value)
+
+
+def _save_loss_signal_plots(loss_history: dict) -> None:
+    LOSS_SIGNALS_DIR.mkdir(parents=True, exist_ok=True)
+
+    all_epochs = loss_history["train"]["epoch"]
+    if not all_epochs:
+        return
+
+    def _finite_series(values):
+        arr = np.array(values, dtype=float)
+        return np.isfinite(arr), arr
+
+    active_keys = []
+    for key in LOSS_SIGNAL_KEYS:
+        train_mask, train_vals = _finite_series(loss_history["train"][key])
+        val_mask, val_vals = _finite_series(loss_history["val"][key])
+        if np.any(train_mask) or np.any(val_mask):
+            active_keys.append(key)
+
+    if not active_keys:
+        return
+
+    n_cols = 3
+    n_rows = math.ceil(len(active_keys) / n_cols)
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(5.2 * n_cols, 3.2 * n_rows),
+        squeeze=False,
+    )
+    epochs = np.array(all_epochs, dtype=int)
+
+    for idx, key in enumerate(active_keys):
+        ax = axes[idx // n_cols][idx % n_cols]
+        train_mask, train_vals = _finite_series(loss_history["train"][key])
+        val_mask, val_vals = _finite_series(loss_history["val"][key])
+        if np.any(train_mask):
+            ax.plot(
+                epochs[train_mask],
+                train_vals[train_mask],
+                label="train",
+                marker="o",
+                linewidth=1.2,
+            )
+        if np.any(val_mask):
+            ax.plot(
+                epochs[val_mask],
+                val_vals[val_mask],
+                label="val",
+                marker="x",
+                linewidth=1.2,
+            )
+        ax.set_title(LOSS_SIGNAL_LABELS.get(key, key))
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Loss")
+        ax.grid(True, alpha=0.25)
+        ax.legend()
+
+    for idx in range(len(active_keys), n_rows * n_cols):
+        axes[idx // n_cols][idx % n_cols].axis("off")
+
+    fig.tight_layout()
+    fig.suptitle("Loss History", y=1.02)
+    plt.savefig(LOSS_SIGNALS_PLOT_PATH, dpi=200)
+    plt.close(fig)
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +303,13 @@ def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
     ckpt_interval = max(1, getattr(scfg, "ckpt_interval", 5))
 
     artifact_history = {'best_uploaded': False, 'last_periodic_epoch': -1, 'total_artifacts': 0}
+    loss_history = {
+        "train": {"epoch": []},
+        "val": {"epoch": []},
+    }
+    for key in LOSS_SIGNAL_KEYS:
+        loss_history["train"][key] = []
+        loss_history["val"][key] = []
 
     for epoch in range(EPOCHS):
         train_total, train_logs, global_step = train_epoch(
@@ -105,6 +330,9 @@ def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
         )
         final_train_total = float(train_total)
         final_val_total = float(val_total)
+        _append_loss_history(loss_history, "train", train_logs, epoch + 1)
+        _append_loss_history(loss_history, "val", val_logs, epoch + 1)
+        _save_loss_signal_plots(loss_history)
 
         # W&B epoch-level logging
         log_epoch = {
@@ -226,12 +454,12 @@ def run_benchmark_and_log_experiment(
     notes: str | None = None,
     tracker: ExperimentTracker | None = None,
 ):
-    """Compute FLOW-GLIDE benchmark metrics and append to experiments/EXPERIMENT_LOG.md."""
+    """Compute FLOW-GLIDE benchmark metrics, log experiment, and update table."""
     from scripts.score_benchmark import score_test_set
     tracker = tracker or ExperimentTracker(
-        log_dir="experiments",
+        log_dir=PROJECT_ROOT / "experiments",
         project_name="AirfRANS 2D Airfoil - GNN Surrogate",
-        reference_path="benchmark/benchmark_reference.json",
+        reference_path=PROJECT_ROOT / "benchmark/benchmark_reference.json",
     )
 
     try:
@@ -260,7 +488,7 @@ def run_benchmark_and_log_experiment(
         )
     except Exception as exc:
         print(f"[experiment log] Benchmark scoring failed: {exc}")
-        return None
+        benchmark_metrics = {}
 
     run_config = asdict(scfg)
     train_metrics = {
@@ -288,20 +516,24 @@ def run_benchmark_and_log_experiment(
             duration_sec=float(training_duration_sec),
             benchmark_metrics=benchmark_metrics,
         )
+        try:
+            _update_flow_glide_comparison_table()
+        except Exception as table_exc:
+            print(f"[experiment log] Flow-Glide comparison table update failed: {table_exc}")
+        print(f"[experiment log] Logged experiment {exp_id} -> experiments/EXPERIMENT_LOG.md")
+        print(f"[experiment log] Flow-Glide comparison table updated -> {FLOW_GLIDE_TABLE_PATH}")
+        print(f"[experiment log] Benchmark metrics: "
+              f"volume_rel_l2={benchmark_metrics.get('volume_rel_l2', float('nan')):.4f}, "
+              f"surface_rel_l2={benchmark_metrics.get('surface_rel_l2', float('nan')):.4f}, "
+              f"cd_relative_error={benchmark_metrics.get('cd_relative_error', float('nan')):.4f}, "
+              f"cl_relative_error={benchmark_metrics.get('cl_relative_error', float('nan')):.4f}, "
+              f"rho_d={benchmark_metrics.get('rho_d', float('nan')):.4f}, "
+              f"rho_l={benchmark_metrics.get('rho_l', float('nan')):.4f}")
+
+        return exp_id
     except Exception as exc:
         print(f"[experiment log] Experiment tracker write failed: {exc}")
         return None
-
-    print(f"[experiment log] Logged experiment {exp_id} -> experiments/EXPERIMENT_LOG.md")
-    print(f"[experiment log] Benchmark metrics: "
-          f"volume_rel_l2={benchmark_metrics.get('volume_rel_l2', float('nan')):.4f}, "
-          f"surface_rel_l2={benchmark_metrics.get('surface_rel_l2', float('nan')):.4f}, "
-          f"cd_relative_error={benchmark_metrics.get('cd_relative_error', float('nan')):.4f}, "
-          f"cl_relative_error={benchmark_metrics.get('cl_relative_error', float('nan')):.4f}, "
-          f"rho_d={benchmark_metrics.get('rho_d', float('nan')):.4f}, "
-          f"rho_l={benchmark_metrics.get('rho_l', float('nan')):.4f}")
-
-    return exp_id
 
 
 # ---------------------------------------------------------------------------
@@ -471,7 +703,7 @@ def plot_pred_vs_gt(dm: Data, y_pred: torch.Tensor, y_scaler, x_scaler,
                     c = pts.mean(axis=0)
                     ang = np.arctan2(pts[:, 1] - c[1], pts[:, 0] - c[0])
                     order = np.argsort(ang)
-                    poly = Path(pts[order], closed=True)
+                    poly = MplPath(pts[order], closed=True)
                     tris = tri.triangles
                     centers = np.mean(np.stack([tri.x[tris], tri.y[tris]], axis=-1), axis=1)
                     inside = poly.contains_points(centers, radius=-1e-6)

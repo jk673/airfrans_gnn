@@ -1,6 +1,7 @@
 # 2a) Utilities: pos2 append, surface mask, and edge features
 import torch
 from torch_geometric.data import Data
+from src.airfrans_utils import _to_xy
 
 
 
@@ -104,9 +105,6 @@ def _prep_graph_for_norm(g):
     d = ensure_edge_features(d, want_dim=5)
     return d
 
-
-def _to_xy(t: torch.Tensor):
-    return t[:, :2].detach().cpu().float().numpy()
 
 def _poly_from_surface(data: Data):
     try:
