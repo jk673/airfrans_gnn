@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import math
 from typing import List
 
@@ -33,9 +32,6 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.training_common import SmokeCfg, load_and_prepare_data, collate_pyg, NormalizedDataset
 from src.global_context_processor import EnhancedCFDModelWithGlobalContext

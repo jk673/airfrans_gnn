@@ -10,7 +10,6 @@ Usage:
 from __future__ import annotations
 
 import os
-import sys
 
 import numpy as np
 import torch
@@ -18,9 +17,6 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler
 from dataclasses import asdict
-
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.training_common import (
     SmokeCfg, DataBundle,

@@ -128,3 +128,47 @@ Uses PyG `Batch.from_data_list()` — multiple variable-size graphs concatenated
 - `prebuilt_edges/<task>/{train,test}/graph_*.pt` — Graphs with precomputed edges
 
 Prebuilt graphs are aligned to the original dataset via `orig_index` field.
+
+## Benchmark Scoring
+
+훈련 완료 후 FLOW-GLIDE 기준 6개 메트릭을 계산하고 비교 테이블을 생성한다.
+
+### 실행 방법
+
+```bash
+# 기본 (best checkpoint, scarce task, hidden=128, layers=14)
+python scripts/score_benchmark.py \
+  --checkpoint checkpoints/best.pt \
+  --task scarce \
+  --hidden 128 --layers 14 \
+  --model-name "Ours"
+
+# 커스텀 설정
+python scripts/score_benchmark.py \
+  --checkpoint checkpoints/best.pt \
+  --task full \
+  --hidden 256 --layers 16 \
+  --model-name "PhysicsGNN v3"
+```
+
+### 메트릭 정의 (FLOW-GLIDE, Su et al. 2025)
+
+| Metric | Description | Direction |
+|--------|-------------|-----------|
+| Volume Rel. L₂ | Relative L2 over all nodes, 4 channels (ux, uy, p, nu_t) | ↓ |
+| Surface Rel. L₂ | Relative L2 over surface nodes, pressure only | ↓ |
+| CD Rel. Error | Mean \|CD_pred − CD_gt\| / \|CD_gt\| | ↓ |
+| CL Rel. Error | Mean \|CL_pred − CL_gt\| / \|CL_gt\| | ↓ |
+| ρ_D (Spearman) | Rank correlation of drag coefficient | ↑ |
+| ρ_L (Spearman) | Rank correlation of lift coefficient | ↑ |
+
+### 출력 파일
+
+- `benchmark_results.json` — 메트릭 값 + 메타데이터
+- `benchmark_results.md` — FLOW-GLIDE 비교 마크다운 테이블
+
+### 참고
+
+- `benchmark_reference.json` — FLOW-GLIDE 논문의 10개 baseline 메트릭
+- `docs/benchmark/benchmark_scoring.md` — 상세 워크플로우 가이드
+- `--hidden`/`--layers`는 체크포인트 훈련 시 사용한 값과 반드시 일치해야 함

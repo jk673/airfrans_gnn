@@ -10,7 +10,6 @@ Usage:
 from __future__ import annotations
 
 import os
-import sys
 import math
 import contextlib
 from dataclasses import asdict
@@ -28,18 +27,15 @@ import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 import wandb
 
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from training_common import (
+from src.training_common import (
     SmokeCfg, DataBundle,
     set_seed, get_lr, collate_pyg,
     load_and_prepare_data, run_epoch,
     create_lr_scheduler, init_wandb,
 )
-from turbulent_modeling_physics_loss import EnhancedPhysicsLoss
-from global_context_processor import UltraEnhancedCFDModel
-from utils import get_surface_mask, with_pos2, ensure_edge_features
+from src.turbulent_modeling_physics_loss import EnhancedPhysicsLoss
+from src.global_context_processor import UltraEnhancedCFDModel
+from src.utils import get_surface_mask, with_pos2, ensure_edge_features
 
 
 # ---------------------------------------------------------------------------

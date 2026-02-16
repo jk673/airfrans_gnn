@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import math
 import gc
 from dataclasses import asdict
@@ -41,9 +40,6 @@ from matplotlib.tri import Triangulation
 from matplotlib.path import Path
 import matplotlib.pyplot as plt
 import wandb
-
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.training_common import (
     SmokeCfg, DataBundle,

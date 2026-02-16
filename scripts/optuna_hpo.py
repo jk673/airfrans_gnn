@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import json
 from dataclasses import asdict
 from datetime import datetime
@@ -51,9 +50,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler
-
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.training_common import (
     SmokeCfg, DataBundle,

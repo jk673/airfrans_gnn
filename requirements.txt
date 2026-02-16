@@ -20,6 +20,7 @@ ipykernel
 notebook
 
 # ── Hyperparameter tuning ──────────────────────────────────────
+# Extra dependencies for Optuna hyperparameter tuning (02_optuna_training.ipynb)
 optuna
 joblib
 

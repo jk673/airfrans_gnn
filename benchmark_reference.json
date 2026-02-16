@@ -1,0 +1,32 @@
+{
+    "_description": "FLOW-GLIDE benchmark reference table (Full Data Regime, AirfRANS). Source: Su et al., Applied Sciences 15(19), 2025.",
+    "_metrics": {
+      "volume_rel_l2": "Relative L2 over all nodes, 4 channels (ux, uy, p, nu_t) flattened",
+      "surface_rel_l2": "Relative L2 over surface nodes, pressure channel only",
+      "cd_relative_error": "Mean |CD_pred - CD_gt| / |CD_gt| across test samples",
+      "cl_relative_error": "Mean |CL_pred - CL_gt| / |CL_gt| across test samples",
+      "rho_d": "Spearman rank correlation of CD across test samples",
+      "rho_l": "Spearman rank correlation of CL across test samples"
+    },
+    "_directions": {
+      "volume_rel_l2": "lower_is_better",
+      "surface_rel_l2": "lower_is_better",
+      "cd_relative_error": "lower_is_better",
+      "cl_relative_error": "lower_is_better",
+      "rho_d": "higher_is_better",
+      "rho_l": "higher_is_better"
+    },
+    "baselines": {
+      "MLP":            { "volume_rel_l2": 0.0311, "surface_rel_l2": 0.1090, "cd_relative_error": 2.2620, "cl_relative_error": 0.3543, "rho_d":  0.1429, "rho_l": 0.9464 },
+      "GraphSAGE":      { "volume_rel_l2": 0.0262, "surface_rel_l2": 0.0634, "cd_relative_error": 2.3411, "cl_relative_error": 0.1875, "rho_d": -0.0071, "rho_l": 0.9767 },
+      "MeshGraphNet":   { "volume_rel_l2": 0.0219, "surface_rel_l2": 0.0599, "cd_relative_error": 1.5174, "cl_relative_error": 0.2073, "rho_d":  0.3786, "rho_l": 0.9732 },
+      "FVGN":           { "volume_rel_l2": 0.0218, "surface_rel_l2": 0.0507, "cd_relative_error": 1.0756, "cl_relative_error": 0.0882, "rho_d":  0.4000, "rho_l": 0.9920 },
+      "Transolver":     { "volume_rel_l2": 0.0100, "surface_rel_l2": 0.0352, "cd_relative_error": 0.6316, "cl_relative_error": 0.1122, "rho_d":  0.8750, "rho_l": 0.9946 },
+      "GNO":            { "volume_rel_l2": 0.0203, "surface_rel_l2": 0.0489, "cd_relative_error": 3.4424, "cl_relative_error": 0.3451, "rho_d": -0.0857, "rho_l": 0.9161 },
+      "GNOT":           { "volume_rel_l2": 0.0155, "surface_rel_l2": 0.0433, "cd_relative_error": 0.6008, "cl_relative_error": 0.1459, "rho_d":  0.8714, "rho_l": 0.9929 },
+      "GINO":           { "volume_rel_l2": 0.0195, "surface_rel_l2": 0.0481, "cd_relative_error": 3.3211, "cl_relative_error": 0.4134, "rho_d": -0.0786, "rho_l": 0.9188 },
+      "Galerkin":       { "volume_rel_l2": 0.0162, "surface_rel_l2": 0.0476, "cd_relative_error": 0.9131, "cl_relative_error": 0.1628, "rho_d":  0.6786, "rho_l": 0.9893 },
+      "FLOW-GLIDE":     { "volume_rel_l2": 0.0038, "surface_rel_l2": 0.0063, "cd_relative_error": 0.5072, "cl_relative_error": 0.1029, "rho_d":  0.9286, "rho_l": 0.9964 }
+    }
+  }
+  

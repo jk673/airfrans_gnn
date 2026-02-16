@@ -1,0 +1,15 @@
+{
+  "volume_rel_l2": 0.9944628843826308,
+  "surface_rel_l2": 0.9955647588510359,
+  "cd_relative_error": 1.2853152147550535,
+  "cl_relative_error": 1.6086559980331285,
+  "rho_d": 0.027116177904447616,
+  "rho_l": -0.006670666766669168,
+  "_model_name": "Ours",
+  "_task": "scarce",
+  "_hidden": 64,
+  "_layers": 14,
+  "_n_parameters": 912260,
+  "_n_test_graphs": 200,
+  "_n_graphs_with_coefficients": 200
+}

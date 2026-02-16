@@ -50,3 +50,6 @@ processed_edges/
 
 
 .mcp.json
+
+# Checkpoint files
+checkpoints/
