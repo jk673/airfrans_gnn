@@ -1,6 +1,6 @@
 # AirfRANS 2D Airfoil - GNN Surrogate
 
-Auto-generated benchmark comparison. Updated: 2026-02-17 09:15:28 UTC
+Auto-generated benchmark comparison. Updated: 2026-02-17 11:31:22 UTC
 
 ## Benchmark Comparison
 
@@ -11,10 +11,122 @@ Auto-generated benchmark comparison. Updated: 2026-02-17 09:15:28 UTC
 | **EXP_0001** (scarce-h32-l14) | 0.9943 | 0.9954 | 1.2413 | 1.7829 | 0.1187 | -0.0182 |
 | **EXP_0002** (scarce-h32-l14) | 0.9944 | 0.9955 | 1.3177 | 2.0607 | 0.1463 | -0.0846 |
 | **EXP_0003** (scarce-h32-l14) | 0.9951 | 0.9962 | 1.4482 | 2.0044 | 0.0233 | -0.0035 |
+| **EXP_0004** (scarce-h32-l8) | 0.9931 | 0.9920 | 1.1468 | 1.0217 | 0.0232 | -0.4048 |
 
 ---
 
 ## Experiment Details
+
+### EXP_0004 — 2026-02-17 11:31:22 UTC
+
+**Model:** scarce-h32-l8 | **Task:** scarce | **Parameters:** 143,172 | **Duration:** 1m 55s
+
+**Notes:** task=scarce, hidden=32, layers=8, lr=0.0004, scheduler=cosine
+
+| Benchmark Metric | Value |
+|--------|-------|
+| volume_rel_l2 | 0.9931 |
+| surface_rel_l2 | 0.9920 |
+| cd_relative_error | 1.1468 |
+| cl_relative_error | 1.0217 |
+| rho_d | 0.0232 |
+| rho_l | -0.4048 |
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| best_val_loss | 0.6936 |
+| best_epoch | 19 |
+| finalloss | 1.3420 |
+| final_val_loss | 0.6936 |
+| artifacts_uploaded | 0 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "seed": 42,
+  "task": "scarce",
+  "root": "Dataset",
+  "limit_train": 180,
+  "limit_val": 20,
+  "batch_size": 10,
+  "epochs": 20,
+  "hidden": 32,
+  "layers": 8,
+  "lr": 0.0004,
+  "weight_decay": 0.01,
+  "betas": [
+    0.9,
+    0.95
+  ],
+  "eps": 1e-08,
+  "amp": false,
+  "dropout": 0.1,
+  "scheduler_step_per_batch": false,
+  "lr_scheduler": "cosine",
+  "cosine_T_max": 80,
+  "cosine_eta_min": 1e-06,
+  "wr_T_0": 10,
+  "wr_T_mult": 1,
+  "wr_eta_min": 1e-06,
+  "rop_factor": 0.5,
+  "rop_patience": 5,
+  "rop_min_lr": 1e-06,
+  "ramp_start_epoch": 40,
+  "ramp_epochs": 60,
+  "ramp_mode": "linear",
+  "data_loss_weight": 1.0,
+  "continuity_loss_weight": 0.05,
+  "continuity_target_weight": 0.2,
+  "momentum_loss_weight": 0.05,
+  "momentum_target_weight": 0.2,
+  "bc_loss_weight": 0.1,
+  "chord_length": 1.0,
+  "nu_molecular": 1.5e-05,
+  "dynamic_uref_from_data": true,
+  "dynamic_re_from_data": true,
+  "uinf_from": "inlet",
+  "use_huber_for_physics": true,
+  "huber_delta": 0.05,
+  "use_perimeter_norm_for_div": true,
+  "div_area_floor_factor": 0.25,
+  "div_min_degree": 2,
+  "physics_debug": false,
+  "physics_debug_level": 1,
+  "physics_debug_every": 50,
+  "use_global_tokens": true,
+  "num_global_tokens": 2,
+  "attention_heads": 2,
+  "attention_layers": 2,
+  "attention_dropout": 0.0,
+  "use_cross_attention": true,
+  "global_pooling_type": "attention",
+  "positional_encoding": false,
+  "pos_encoding_max_len": 50000,
+  "use_residual_attention": true,
+  "attention_normalization": "layer",
+  "temperature_scaling": false,
+  "attention_bias": false,
+  "use_wandb_artifacts": false,
+  "artifact_save_best_only": true,
+  "artifact_save_interval": 50,
+  "ckpt_dir": "checkpoints",
+  "ckpt_interval": 5,
+  "wandb_project": "airfrans-gnn",
+  "enable_wandb": false,
+  "wandb_mode": "online",
+  "wandb_name": null,
+  "wandb_run_name": null,
+  "wandb_tags": null,
+  "log_every_n_steps": -1,
+  "log_epoch_only": true
+}
+```
+
+</details>
+
+---
 
 ### EXP_0003 — 2026-02-17 09:15:28 UTC
 

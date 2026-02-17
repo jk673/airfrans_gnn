@@ -71,6 +71,16 @@ class NormalizedDataset(torch.utils.data.Dataset):
 
         dm.has_norm = True
 
+        # Attach norm params so physics loss can denormalize properly
+        dm.y_norm_params = {
+            'mean': self.y_scaler.mean.clone(),
+            'scale': self.y_scaler.std.clone(),
+        }
+        dm.x_norm_params = {
+            'mean': self.x_scaler.mean.clone(),
+            'scale': self.x_scaler.std.clone(),
+        }
+
         # Ensure edge_attr_dxdy is present (needed for physics loss)
         if hasattr(d, 'edge_attr_dxdy'):
             dm.edge_attr_dxdy = d.edge_attr_dxdy
@@ -129,7 +139,20 @@ def collate_pyg(batch):
     batch = [b for b in batch if b is not None]
     if len(batch) == 0:
         return None
-    return Batch.from_data_list(batch)
+
+    # Extract norm_params before batching (PyG can mis-collate dicts)
+    norm_params = {}
+    for key in ('y_norm_params', 'x_norm_params'):
+        if hasattr(batch[0], key):
+            norm_params[key] = getattr(batch[0], key)
+
+    batched = Batch.from_data_list(batch)
+
+    # Reattach norm_params as single shared dicts
+    for key, value in norm_params.items():
+        setattr(batched, key, value)
+
+    return batched
 
 
 # ---------------------------------------------------------------------------
