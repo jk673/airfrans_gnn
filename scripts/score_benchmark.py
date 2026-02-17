@@ -34,8 +34,14 @@ import argparse
 import json
 import math
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+# Ensure project root is on path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
 
 import numpy as np
 import torch
@@ -396,9 +402,9 @@ def main():
     y_scaler = data_bundle.y_scaler
 
     # Build test loader
-    test_graphs = data_bundle.val_graphs  # 'val_graphs' holds test split for prebuilt_edges
+    test_graphs = data_bundle.val_graphs  # 'val_graphs' holds test split for prebuilt_edges_v2
     if not isinstance(test_graphs, list) or len(test_graphs) == 0:
-        raise ValueError("No test graphs found. Check prebuilt_edges/<task>/test/ exists.")
+        raise ValueError("No test graphs found. Check prebuilt_edges_v2/<task>/test/ exists.")
 
     test_prepped = [_prep_graph_for_norm(g) for g in test_graphs]
     test_ds = NormalizedDataset(test_prepped, x_scaler, y_scaler)

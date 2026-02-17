@@ -19,7 +19,7 @@ from .preprocessing import prepare_airfrans_graph_for_physics, build_bc_masks_ai
 from .utils import prep_graph, validate_edges, _prep_graph_for_norm
 
 
-PREBUILT_EDGES_DIR = Path(__file__).resolve().parents[1] / "prebuilt_edges"
+PREBUILT_EDGES_DIR = Path(__file__).resolve().parents[1] / "prebuilt_edges_v2"
 
 
 # ---------------------------------------------------------------------------

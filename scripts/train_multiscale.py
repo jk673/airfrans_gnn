@@ -31,7 +31,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from dataclasses import dataclass
+from pathlib import Path
+
+# Ensure project root is on path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
 
 import torch
 import wandb
