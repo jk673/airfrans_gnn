@@ -54,15 +54,21 @@ Key dependencies: PyTorch, PyTorch Geometric, torch-scatter, torch-sparse, wandb
 python preprocessing/downsample_airfrans.py --root Dataset --task scarce --out-dir downsampled_graphs
 
 # Step 2: Build multi-scale radius-graph edges
-python preprocessing/build_edges_from_downsampled.py --in-dir downsampled_graphs --out-dir prebuilt_edges --task scarce
+python preprocessing/build_edges_from_downsampled.py --in-dir downsampled_graphs --out-dir prebuilt_edges_v2 --task scarce
 ```
 
 ### Training
 
-Training runs through Jupyter notebooks:
-- `01_trainer.ipynb` — Main training pipeline
-- `02_optuna_training.ipynb` — Hyperparameter optimization with Optuna
-- `02_trainer_multi_scale.ipynb` — Multi-scale model variant
+CLI scripts (preferred):
+- `scripts/train.py` — Main training pipeline with full CLI args
+- `scripts/run_experiment.py` — Train + benchmark score + experiment logging
+- `scripts/train_multiscale.py` — Multi-scale model variant
+- `scripts/optuna_hpo.py` — Hyperparameter optimization with Optuna
+
+Jupyter notebooks (interactive exploration):
+- `notebooks/01_trainer.ipynb` — Main training pipeline
+- `notebooks/02_optuna_training.ipynb` — Hyperparameter optimization with Optuna
+- `notebooks/02_trainer_multi_scale.ipynb` — Multi-scale model variant
 
 ### Tests
 
@@ -75,16 +81,16 @@ pytest tests/test_continuity_loss.py::test_continuity_zero_divergence_gt_only -v
 
 ### Pipeline Flow
 
-Raw AirfRANS data → `preprocessing/downsample_airfrans.py` (adaptive voxel sampling, preserves surface nodes) → `preprocessing/build_edges_from_downsampled.py` (radius-graph edges with KNN backup) → Training notebook (normalize, train with physics loss, evaluate)
+Raw AirfRANS data → `preprocessing/downsample_airfrans.py` (adaptive voxel sampling, preserves surface nodes) → `preprocessing/build_edges_from_downsampled.py` (radius-graph edges with KNN backup) → Training via `scripts/train.py` or notebooks (normalize with `src/data.py`, train with `src/training.py` + physics loss, evaluate)
 
-### Model: `EnhancedCFDModelWithGlobalContext` (defined in `01_trainer.ipynb`)
+### Model: `EnhancedCFDModelWithGlobalContext` (defined in `src/global_context_processor.py`)
 
 - **Input**: 7D node features (freestream velocity, wall distance, wall normals, position) + 5D edge features
 - **Output**: 4D predictions (u, v, pressure, nu_t)
 - **Architecture**: Node/Edge encoders → 14 message-passing layers → optional `GlobalContextProcessor` (attention-based) → output decoder
-- Configuration lives in `SmokeCfg` dataclass inside `01_trainer.ipynb`
+- Configuration lives in `SmokeCfg` dataclass in `src/config.py`
 
-### Physics-Informed Loss (`src/navier_stokes_physics_loss.py`)
+### Physics-Informed Loss (`src/physics_loss.py`)
 
 Combined loss with curriculum learning:
 - **Data loss**: MSE on predictions
@@ -92,24 +98,31 @@ Combined loss with curriculum learning:
 - **Momentum loss**: RANS momentum balance with skew-symmetric convection
 - **BC loss**: No-slip walls, inlet/outlet/farfield conditions
 
-Physics weights ramp up over training via linear or cosine curriculum schedule. `src/airfrans_utils.py:prepare_airfrans_graph_for_physics()` precomputes node areas, boundary masks, wall normals, and inlet velocities needed by the physics loss.
+Physics weights ramp up over training via linear or cosine curriculum schedule. `src/preprocessing.py:prepare_airfrans_graph_for_physics()` precomputes node areas, boundary masks, wall normals, and inlet velocities needed by the physics loss.
 
 ### Key Module Responsibilities
 
 | File | Purpose |
 |------|---------|
-| `preprocessing/downsample_airfrans.py` | Adaptive voxel downsampling with surface preservation |
-| `preprocessing/build_edges_from_downsampled.py` | Edge construction wrapper |
-| `src/preprocess_airfrans_edges.py` | Radius-graph edge building, degree floor enforcement, edge feature computation |
-| `src/airfrans_utils.py` | Physics preprocessing (areas, BC masks, wall normals) |
-| `src/navier_stokes_physics_loss.py` | RANS physics loss with curriculum scheduling |
-| `src/turbulent_modeling_physics_loss.py` | Turbulence model extensions |
-| `src/global_context_processor.py` | Attention-based global context with cross-attention and Set2Set pooling |
+| `src/config.py` | `SmokeCfg` dataclass, config file loading (`load_config_file`, `apply_config_dict`) |
+| `src/data.py` | `StandardScaler`, `NormalizedDataset`, `DataBundle`, `load_and_prepare_data`, `collate_pyg` |
+| `src/training.py` | `train_epoch`, `run_epoch`, `compute_loss_with_physics`, LR scheduler, wandb init |
+| `src/preprocessing.py` | Physics preprocessing (BC masks, node areas, wall normals, edge geometry) |
+| `src/physics_loss.py` | `NavierStokesPhysicsLoss` — RANS physics loss with curriculum scheduling |
+| `src/turbulent_physics_loss.py` | `EnhancedPhysicsLoss` — turbulence model extensions |
+| `src/global_context_processor.py` | `EnhancedCFDModelWithGlobalContext` — attention-based global context model |
 | `src/multigraph_convolution.py` | Multi-scale and dilated graph convolutions |
-| `src/force_coefficients_calculation.py` | Lift/drag coefficient integration from surface pressure |
-| `src/utils.py` / `src/utils_prune.py` | Graph utilities and isolated node pruning |
+| `src/force_coefficients.py` | Lift/drag coefficient integration from surface pressure |
+| `src/utils.py` | Graph utilities (`prep_graph`, `validate_edges`, `_valid_edges`, `_prep_graph_for_norm`) |
+| `src/benchmark.py` | `ExperimentTracker`, FLOW-GLIDE comparison table generation |
+| `src/diagnostics.py` | Diagnostic plots and statistics (`plot_inlet_bc_velocity`, `print_diagnostic_stats`) |
+| `src/metrics.py` | Surface mask detection, force coefficient computation |
+| `src/prediction.py` | Model inference helpers |
+| `src/visualization.py` | Prediction vs. ground-truth plotting |
+| `src/training_common.py` | Backward-compat shim — re-exports from `config`, `data`, `training` |
+| `src/preprocess_airfrans_edges.py` | Radius-graph edge building, degree floor enforcement, edge features |
+| `preprocessing/build_edges_from_downsampled.py` | Edge construction wrapper (CLI) |
 | `benchmark/benchmark_reference.json` | FLOW-GLIDE 논문의 10개 baseline 메트릭 |
-| `benchmark/scoring_guide.md` | 벤치마크 스코어링 상세 워크플로우 가이드 |
 | `scripts/score_benchmark.py` | CLI 벤치마크 스코어링 (6개 메트릭 계산 + 비교 테이블) |
 
 ### Edge Attribute Schema
@@ -122,13 +135,13 @@ Detection heuristic is in `src/preprocess_airfrans_edges.py` based on column val
 
 ### Batching
 
-Uses PyG `Batch.from_data_list()` — multiple variable-size graphs concatenated into one with `batch` tensor for per-graph operations. The `NormalizedDataset` class in the training notebook handles feature normalization with StandardScaler.
+Uses PyG `Batch.from_data_list()` — multiple variable-size graphs concatenated into one with `batch` tensor for per-graph operations. `NormalizedDataset` in `src/data.py` handles feature normalization with `StandardScaler`.
 
 ## Data Artifacts
 
 - `Dataset/` — Raw AirfRANS dataset
 - `downsampled_graphs/<task>/{train,test}/graph_*.pt` — Downsampled graphs
-- `prebuilt_edges/<task>/{train,test}/graph_*.pt` — Graphs with precomputed edges
+- `prebuilt_edges_v2/<task>/{train,test}/graph_*.pt` — Graphs with precomputed edges
 
 Prebuilt graphs are aligned to the original dataset via `orig_index` field.
 
