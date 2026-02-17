@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 from torch.utils.data import DataLoader
 
-from src.data import DataBundle, NormalizedDataset, collate_pyg
+from src.data import DataBundle, NormalizedDataset, collate_pyg, enrich_edge_features
 from src.utils import _prep_graph_for_norm
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -449,7 +449,7 @@ def run_benchmark_and_log_experiment(
             print("[experiment log] No test graphs found in data_bundle.val_graphs; skipping experiment log.")
             return None
 
-        test_prepped = [_prep_graph_for_norm(g) for g in test_graphs]
+        test_prepped = [enrich_edge_features(_prep_graph_for_norm(g)) for g in test_graphs]
         test_ds = NormalizedDataset(test_prepped, data_bundle.x_scaler, data_bundle.y_scaler)
         test_loader = DataLoader(
             test_ds,

@@ -51,7 +51,7 @@ from torch_geometric.data import Data, Batch
 from tqdm.auto import tqdm
 
 from src.config import SmokeCfg
-from src.data import load_and_prepare_data, collate_pyg, NormalizedDataset
+from src.data import load_and_prepare_data, collate_pyg, NormalizedDataset, enrich_edge_features
 from src.global_context_processor import EnhancedCFDModelWithGlobalContext
 from src.utils import _prep_graph_for_norm
 from src.metrics import surface_mask_from_x_phys, compute_force_coefficients
@@ -407,7 +407,7 @@ def main():
     if not isinstance(test_graphs, list) or len(test_graphs) == 0:
         raise ValueError("No test graphs found. Check prebuilt_edges_v2/<task>/test/ exists.")
 
-    test_prepped = [_prep_graph_for_norm(g) for g in test_graphs]
+    test_prepped = [enrich_edge_features(_prep_graph_for_norm(g)) for g in test_graphs]
     test_ds = NormalizedDataset(test_prepped, x_scaler, y_scaler)
     test_loader = DataLoader(
         test_ds, batch_size=args.batch_size, shuffle=False,

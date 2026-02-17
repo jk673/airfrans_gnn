@@ -309,7 +309,7 @@ def main():
 
     # --- Model ---
     node_dim = 7
-    edge_dim = 5
+    edge_dim = data_bundle.edge_dim
 
     import gc
     gc.collect()

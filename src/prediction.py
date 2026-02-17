@@ -22,6 +22,7 @@ import torch
 from torch_geometric.data import Data
 
 from src.utils import get_surface_mask, ensure_edge_features, with_pos2
+from src.data import enrich_edge_features
 
 
 @torch.no_grad()
@@ -111,8 +112,9 @@ def predict_one_local(
     # Validate edge existence
     assert hasattr(dm, "edge_index") and dm.edge_index is not None, "edge_index missing"
 
-    # Ensure 5D edge features
+    # Ensure 5D edge features, then enrich to 10D
     dm = ensure_edge_features(dm, want_dim=5)
+    dm = enrich_edge_features(dm)
     dm.x_orig = dm.x
 
     # Build normalized copy for evaluation
@@ -188,9 +190,10 @@ def predict_one_for_viz(
     if dm.x.size(1) == 5 or not getattr(dm, "pos2_appended", False):
         dm = with_pos2(dm)
 
-    # Validate and ensure edges
+    # Validate and ensure edges, then enrich
     assert hasattr(dm, "edge_index") and dm.edge_index is not None, "edge_index missing"
     dm = ensure_edge_features(dm, want_dim=5)
+    dm = enrich_edge_features(dm)
 
     # Normalize
     dm_norm = Data(**{k: v for k, v in dm})

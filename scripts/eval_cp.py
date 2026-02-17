@@ -35,7 +35,7 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from src.config import SmokeCfg
-from src.data import load_and_prepare_data, collate_pyg, NormalizedDataset
+from src.data import load_and_prepare_data, collate_pyg, NormalizedDataset, enrich_edge_features
 from src.global_context_processor import EnhancedCFDModelWithGlobalContext
 from src.utils import _prep_graph_for_norm
 from src.metrics import (
@@ -282,7 +282,7 @@ def main():
         test_graphs = data_bundle.val_graphs
         if not isinstance(test_graphs, list) or len(test_graphs) == 0:
             raise ValueError("No test graphs available")
-        test_prepped = [_prep_graph_for_norm(g) for g in test_graphs]
+        test_prepped = [enrich_edge_features(_prep_graph_for_norm(g)) for g in test_graphs]
         eval_ds = NormalizedDataset(test_prepped, x_scaler, y_scaler)
         print(f"  Test graphs: {len(eval_ds)}")
     else:
@@ -299,7 +299,7 @@ def main():
     # Build model
     print(f"\nBuilding model...")
     node_dim = 7
-    edge_dim = 5
+    edge_dim = data_bundle.edge_dim
     model = EnhancedCFDModelWithGlobalContext(
         node_feat_dim=node_dim,
         edge_feat_dim=edge_dim,

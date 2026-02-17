@@ -177,7 +177,7 @@ def objective(trial: optuna.Trial, data_bundle: DataBundle, device: torch.device
 
     # Model
     model_trial = EnhancedCFDModelWithGlobalContext(
-        node_feat_dim=7, edge_feat_dim=5,
+        node_feat_dim=7, edge_feat_dim=data_bundle.edge_dim,
         hidden_dim=config.hidden, output_dim=4,
         num_mp_layers=config.layers,
         dropout_p=dropout_p, config=config,
@@ -193,15 +193,22 @@ def objective(trial: optuna.Trial, data_bundle: DataBundle, device: torch.device
     scheduler_trial = create_lr_scheduler(optimizer_trial, config)
 
     # Physics Loss
+    spe = max(1, len(train_loader_trial))
     loss_fn_trial = NavierStokesPhysicsLoss(
         data_loss_weight=getattr(config, 'data_loss_weight', 1.0),
         continuity_loss_weight=config.continuity_loss_weight,
         continuity_target_weight=config.continuity_target_weight,
         momentum_loss_weight=config.momentum_loss_weight,
         momentum_target_weight=config.momentum_target_weight,
-        curriculum_ramp_steps=config.ramp_epochs * max(1, len(train_loader_trial)),
-        ramp_start_step=config.ramp_start_epoch * max(1, len(train_loader_trial)),
+        curriculum_ramp_steps=config.ramp_epochs * spe,
+        ramp_start_step=config.ramp_start_epoch * spe,
         ramp_mode=config.ramp_mode,
+        cont_ramp_start_step=getattr(config, 'cont_ramp_start_epoch', -1) * spe if getattr(config, 'cont_ramp_start_epoch', -1) >= 0 else -1,
+        cont_curriculum_ramp_steps=getattr(config, 'cont_ramp_epochs', -1) * spe if getattr(config, 'cont_ramp_epochs', -1) >= 0 else -1,
+        mom_ramp_start_step=getattr(config, 'mom_ramp_start_epoch', -1) * spe if getattr(config, 'mom_ramp_start_epoch', -1) >= 0 else -1,
+        mom_curriculum_ramp_steps=getattr(config, 'mom_ramp_epochs', -1) * spe if getattr(config, 'mom_ramp_epochs', -1) >= 0 else -1,
+        bc_ramp_start_step=getattr(config, 'bc_ramp_start_epoch', -1) * spe if getattr(config, 'bc_ramp_start_epoch', -1) >= 0 else -1,
+        bc_curriculum_ramp_steps=getattr(config, 'bc_ramp_epochs', -1) * spe if getattr(config, 'bc_ramp_epochs', -1) >= 0 else -1,
         bc_loss_weight=config.bc_loss_weight,
         chord_length=getattr(config, 'chord_length', 1.0),
         dynamic_uref_from_data=getattr(config, 'dynamic_uref_from_data', True),

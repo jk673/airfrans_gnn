@@ -264,12 +264,74 @@ python scripts/train.py \
 ```
 
 ### 물리 손실 튜닝
+
+물리 손실(continuity, momentum, BC)은 학습 초반에는 0에서 시작하여 지정된 에폭 이후 서서히 증가하는 **curriculum ramp** 방식을 사용합니다.
+
+#### 공용 ramp (모든 물리 손실에 동일 적용)
+
 ```bash
 python scripts/train.py \
     --continuity-target-weight 0.3 \
     --momentum-target-weight 0.3 \
+    --bc-loss-weight 0.1 \
     --ramp-start-epoch 30 \
     --ramp-epochs 70
+```
+
+위 설정은 epoch 0-29까지 물리 손실 가중치가 0이고, epoch 30부터 70 에폭에 걸쳐 목표 가중치까지 선형 증가합니다.
+
+#### 개별 ramp (손실 유형별 다른 스케줄)
+
+각 물리 손실에 독립적인 시작 에폭과 ramp 기간을 설정할 수 있습니다. `-1`이면 공용 값을 사용합니다.
+
+| 파라미터 | 설명 | 기본값 |
+|----------|------|--------|
+| `--cont-ramp-start-epoch` | Continuity 손실 ramp 시작 에폭 | -1 (공용) |
+| `--cont-ramp-epochs` | Continuity 손실 ramp 기간 | -1 (공용) |
+| `--mom-ramp-start-epoch` | Momentum 손실 ramp 시작 에폭 | -1 (공용) |
+| `--mom-ramp-epochs` | Momentum 손실 ramp 기간 | -1 (공용) |
+| `--bc-ramp-start-epoch` | BC 손실 ramp 시작 에폭 | -1 (공용) |
+| `--bc-ramp-epochs` | BC 손실 ramp 기간 | -1 (공용) |
+| `--ramp-mode` | Ramp 형태 (`linear` 또는 `cosine`) | linear |
+
+```bash
+# 예: data loss로 50 에폭 안정화 후, continuity → momentum → BC 순으로 단계적 활성화
+python scripts/train.py \
+    --epochs 300 \
+    --continuity-loss-weight 0.0 --continuity-target-weight 0.2 \
+    --cont-ramp-start-epoch 50 --cont-ramp-epochs 40 \
+    --momentum-loss-weight 0.0 --momentum-target-weight 0.2 \
+    --mom-ramp-start-epoch 80 --mom-ramp-epochs 50 \
+    --bc-loss-weight 0.1 \
+    --bc-ramp-start-epoch 100 --bc-ramp-epochs 30 \
+    --ramp-mode cosine
+```
+
+위 설정의 타임라인:
+```
+ep  0-49:  data loss만 학습
+ep 50-89:  + continuity 서서히 증가 (cosine)
+ep 80-129: + momentum 서서히 증가
+ep100-129: + BC 서서히 증가
+ep130-300: 모든 물리 손실 최종 가중치로 학습
+```
+
+JSON 설정 파일(`configs/train_default.json`)로도 동일하게 설정 가능합니다:
+```json
+{
+  "continuity_loss_weight": 0.0,
+  "continuity_target_weight": 0.2,
+  "cont_ramp_start_epoch": 50,
+  "cont_ramp_epochs": 40,
+  "momentum_loss_weight": 0.0,
+  "momentum_target_weight": 0.2,
+  "mom_ramp_start_epoch": 80,
+  "mom_ramp_epochs": 50,
+  "bc_loss_weight": 0.1,
+  "bc_ramp_start_epoch": 100,
+  "bc_ramp_epochs": 30,
+  "ramp_mode": "cosine"
+}
 ```
 
 ### HPO 실행 후 최적 모델 학습

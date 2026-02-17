@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import glob
 import random
@@ -116,6 +117,51 @@ class PreparePhysics(BaseTransform):
 
 
 # ---------------------------------------------------------------------------
+# Edge feature enrichment (5D → 10D at load time)
+# ---------------------------------------------------------------------------
+
+def enrich_edge_features(data: Data) -> Data:
+    """Append 5 additional edge features to existing edge_attr (5D → 10D).
+
+    New features: log_dist, edge_angle, relative_sdf, min_sdf, has_boundary_node.
+    Called AFTER _prep_graph_for_norm. x[:, 2] = sdf in both 5D and 7D x.
+    """
+    ea = data.edge_attr   # [E, 5]: [dist, dir_x, dir_y, cos_n, is_surface_pair]
+    ei = data.edge_index   # [2, E]
+    x = data.x             # [N, 5+]: raw [u_inf, v_inf, sdf, nx, ny]
+
+    if ea is None or ei is None or x is None:
+        return data
+    if ea.size(1) != 5:
+        return data  # already enriched or unexpected schema
+
+    row, col = ei
+    dist = ea[:, 0:1]  # [E, 1]
+
+    # 1. log_dist — scale-aware distance
+    log_dist = torch.log(dist + 1e-8)
+
+    # 2. edge_angle — edge orientation normalized to [-1, 1]
+    dvec = ea[:, 1:3] * dist  # recover [dx, dy] from dir_xy * dist
+    edge_angle = (torch.atan2(dvec[:, 1], dvec[:, 0]) / math.pi).unsqueeze(1)
+
+    # 3. relative_sdf — wall distance gradient along edge
+    sdf = x[:, 2]
+    relative_sdf = ((sdf[col] - sdf[row]) / (dist.squeeze(1) + 1e-8)).unsqueeze(1)
+
+    # 4. min_sdf — boundary proximity
+    min_sdf = torch.minimum(sdf[row], sdf[col]).unsqueeze(1)
+
+    # 5. has_boundary_node — at least one endpoint on surface
+    from src.utils import get_surface_mask
+    surf_mask = get_surface_mask(data)
+    has_bnd = (surf_mask[row] | surf_mask[col]).float().unsqueeze(1)
+
+    data.edge_attr = torch.cat([ea, log_dist, edge_angle, relative_sdf, min_sdf, has_bnd], dim=1)
+    return data
+
+
+# ---------------------------------------------------------------------------
 # DataBundle — holds loaders, scalers, graphs
 # ---------------------------------------------------------------------------
 
@@ -129,6 +175,7 @@ class DataBundle:
     val_graphs: list
     train_norm: NormalizedDataset
     val_norm: object  # NormalizedDataset or empty list
+    edge_dim: int = 5
 
 
 # ---------------------------------------------------------------------------
@@ -204,8 +251,8 @@ def load_and_prepare_data(scfg: SmokeCfg) -> DataBundle:
         train_edges_subset = train_edges
         val_edges_subset = val_edges
 
-    train_prepped = [_prep_graph_for_norm(g) for g in train_edges_subset]
-    val_prepped = [_prep_graph_for_norm(g) for g in val_edges_subset] if isinstance(val_edges_subset, list) else []
+    train_prepped = [enrich_edge_features(_prep_graph_for_norm(g)) for g in train_edges_subset]
+    val_prepped = [enrich_edge_features(_prep_graph_for_norm(g)) for g in val_edges_subset] if isinstance(val_edges_subset, list) else []
 
     # Fit scalers
     X_train = torch.cat([d.x for d in train_prepped if hasattr(d, 'x') and d.x is not None], dim=0)
@@ -225,6 +272,8 @@ def load_and_prepare_data(scfg: SmokeCfg) -> DataBundle:
     train_loader = DataLoader(train_norm, batch_size=scfg.batch_size, shuffle=True, num_workers=0, collate_fn=collate_pyg)
     val_loader = DataLoader(val_norm, batch_size=scfg.batch_size, shuffle=False, num_workers=0, collate_fn=collate_pyg) if isinstance(val_norm, NormalizedDataset) else []
 
+    edge_dim = train_prepped[0].edge_attr.shape[1] if train_prepped and hasattr(train_prepped[0], 'edge_attr') and train_prepped[0].edge_attr is not None else 5
+
     return DataBundle(
         train_loader=train_loader,
         val_loader=val_loader,
@@ -234,4 +283,5 @@ def load_and_prepare_data(scfg: SmokeCfg) -> DataBundle:
         val_graphs=val_edges,
         train_norm=train_norm,
         val_norm=val_norm,
+        edge_dim=edge_dim,
     )

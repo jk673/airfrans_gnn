@@ -125,7 +125,7 @@ def main():
 
     # --- Model ---
     node_dim = 7
-    edge_dim = 5
+    edge_dim = data_bundle.edge_dim
 
     gc.collect()
     if torch.cuda.is_available():
@@ -162,6 +162,13 @@ def main():
         curriculum_ramp_steps=scfg.ramp_epochs * steps_per_epoch,
         ramp_start_step=scfg.ramp_start_epoch * steps_per_epoch,
         ramp_mode=scfg.ramp_mode,
+        # Per-component ramp overrides (epoch → step conversion, -1 = use shared)
+        cont_ramp_start_step=scfg.cont_ramp_start_epoch * steps_per_epoch if scfg.cont_ramp_start_epoch >= 0 else -1,
+        cont_curriculum_ramp_steps=scfg.cont_ramp_epochs * steps_per_epoch if scfg.cont_ramp_epochs >= 0 else -1,
+        mom_ramp_start_step=scfg.mom_ramp_start_epoch * steps_per_epoch if scfg.mom_ramp_start_epoch >= 0 else -1,
+        mom_curriculum_ramp_steps=scfg.mom_ramp_epochs * steps_per_epoch if scfg.mom_ramp_epochs >= 0 else -1,
+        bc_ramp_start_step=scfg.bc_ramp_start_epoch * steps_per_epoch if scfg.bc_ramp_start_epoch >= 0 else -1,
+        bc_curriculum_ramp_steps=scfg.bc_ramp_epochs * steps_per_epoch if scfg.bc_ramp_epochs >= 0 else -1,
         bc_loss_weight=scfg.bc_loss_weight,
         chord_length=scfg.chord_length,
         dynamic_uref_from_data=scfg.dynamic_uref_from_data,
@@ -178,8 +185,15 @@ def main():
         debug_every=scfg.physics_debug_every,
     )
     if is_main:
-        print(f"Physics loss initialized: cont {scfg.continuity_loss_weight:.3f}->{scfg.continuity_target_weight:.3f}, "
-              f"mom {scfg.momentum_loss_weight:.3f}->{scfg.momentum_target_weight:.3f}")
+        _cont_start = scfg.cont_ramp_start_epoch if scfg.cont_ramp_start_epoch >= 0 else scfg.ramp_start_epoch
+        _mom_start  = scfg.mom_ramp_start_epoch  if scfg.mom_ramp_start_epoch  >= 0 else scfg.ramp_start_epoch
+        _bc_start   = scfg.bc_ramp_start_epoch   if scfg.bc_ramp_start_epoch   >= 0 else scfg.ramp_start_epoch
+        _cont_dur   = scfg.cont_ramp_epochs if scfg.cont_ramp_epochs >= 0 else scfg.ramp_epochs
+        _mom_dur    = scfg.mom_ramp_epochs  if scfg.mom_ramp_epochs  >= 0 else scfg.ramp_epochs
+        _bc_dur     = scfg.bc_ramp_epochs   if scfg.bc_ramp_epochs   >= 0 else scfg.ramp_epochs
+        print(f"Physics loss initialized: cont {scfg.continuity_loss_weight:.3f}->{scfg.continuity_target_weight:.3f} (ep {_cont_start}+{_cont_dur}), "
+              f"mom {scfg.momentum_loss_weight:.3f}->{scfg.momentum_target_weight:.3f} (ep {_mom_start}+{_mom_dur}), "
+              f"bc {scfg.bc_loss_weight:.3f} (ep {_bc_start}+{_bc_dur})")
 
     # --- LR Scheduler ---
     lr_scheduler = create_lr_scheduler(optimizer, scfg)

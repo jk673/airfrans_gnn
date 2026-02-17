@@ -30,6 +30,7 @@ from src.training import set_seed, train_epoch, run_epoch, create_lr_scheduler
 from src.global_context_processor import EnhancedCFDModelWithGlobalContext
 from src.physics_loss import NavierStokesPhysicsLoss
 from src.utils import _prep_graph_for_norm
+from src.data import enrich_edge_features
 from scripts.score_benchmark import score_test_set
 from src.benchmark import ExperimentTracker
 
@@ -74,7 +75,7 @@ def main():
 
     # --- Model ---
     model = EnhancedCFDModelWithGlobalContext(
-        node_feat_dim=7, edge_feat_dim=5,
+        node_feat_dim=7, edge_feat_dim=data_bundle.edge_dim,
         hidden_dim=scfg.hidden, output_dim=4,
         num_mp_layers=scfg.layers,
         dropout_p=0.1, config=scfg,
@@ -92,6 +93,12 @@ def main():
         curriculum_ramp_steps=scfg.ramp_epochs,
         ramp_start_step=scfg.ramp_start_epoch,
         ramp_mode=scfg.ramp_mode,
+        cont_ramp_start_step=scfg.cont_ramp_start_epoch if scfg.cont_ramp_start_epoch >= 0 else -1,
+        cont_curriculum_ramp_steps=scfg.cont_ramp_epochs if scfg.cont_ramp_epochs >= 0 else -1,
+        mom_ramp_start_step=scfg.mom_ramp_start_epoch if scfg.mom_ramp_start_epoch >= 0 else -1,
+        mom_curriculum_ramp_steps=scfg.mom_ramp_epochs if scfg.mom_ramp_epochs >= 0 else -1,
+        bc_ramp_start_step=scfg.bc_ramp_start_epoch if scfg.bc_ramp_start_epoch >= 0 else -1,
+        bc_curriculum_ramp_steps=scfg.bc_ramp_epochs if scfg.bc_ramp_epochs >= 0 else -1,
         chord_length=scfg.chord_length,
         nu_molecular=scfg.nu_molecular,
         dynamic_uref_from_data=scfg.dynamic_uref_from_data,
@@ -166,7 +173,7 @@ def main():
 
     # Build test loader from val_graphs (test split for prebuilt_edges_v2)
     test_graphs = data_bundle.val_graphs
-    test_prepped = [_prep_graph_for_norm(g) for g in test_graphs]
+    test_prepped = [enrich_edge_features(_prep_graph_for_norm(g)) for g in test_graphs]
     test_ds = NormalizedDataset(test_prepped, data_bundle.x_scaler, data_bundle.y_scaler)
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=0, collate_fn=collate_pyg)
     print(f"Test graphs: {len(test_ds)}")
