@@ -6,7 +6,7 @@ from typing import Optional
 
 # Local imports
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from src.navier_stokes_physics_loss import NavierStokesPhysicsLoss
+from src.physics_loss import NavierStokesPhysicsLoss
 from src.preprocess_airfrans_edges import Params, build_edges_for_graph
 
 try:

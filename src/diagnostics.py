@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 from src.training_common import DataBundle
 from src.prediction import predict_one_local
-from src.airfrans_utils import build_bc_masks_airfrans
+from src.preprocessing import build_bc_masks_airfrans
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 INLET_BC_PLOT_DIR = PROJECT_ROOT / "experiments" / "loss_behavior"

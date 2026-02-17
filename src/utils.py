@@ -5,6 +5,11 @@ from matplotlib.path import Path
 from torch_geometric.data import Data
 
 
+def _valid_edges(edge_index: torch.Tensor, N: int) -> torch.Tensor:
+    """Return boolean mask for edges within valid node range [0, N)."""
+    row, col = edge_index
+    return (row >= 0) & (row < N) & (col >= 0) & (col < N)
+
 
 def with_pos2(data):
     # Append 2D position (pos[:,:2]->pos2) into node features x to make 7D (orig 5 + pos2)

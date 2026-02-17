@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_add
-from src.airfrans_utils import _valid_edges
+from src.utils import _valid_edges
 
 
 

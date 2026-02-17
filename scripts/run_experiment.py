@@ -29,7 +29,7 @@ from src.training_common import (
     set_seed, train_epoch, run_epoch, create_lr_scheduler,
 )
 from src.global_context_processor import EnhancedCFDModelWithGlobalContext
-from src.navier_stokes_physics_loss import NavierStokesPhysicsLoss
+from src.physics_loss import NavierStokesPhysicsLoss
 from src.utils import _prep_graph_for_norm
 from scripts.score_benchmark import score_test_set
 from src.benchmark import ExperimentTracker
@@ -165,7 +165,7 @@ def main():
     model = model.to(device)
     model.eval()
 
-    # Build test loader from val_graphs (test split for prebuilt_edges)
+    # Build test loader from val_graphs (test split for prebuilt_edges_v2)
     test_graphs = data_bundle.val_graphs
     test_prepped = [_prep_graph_for_norm(g) for g in test_graphs]
     test_ds = NormalizedDataset(test_prepped, data_bundle.x_scaler, data_bundle.y_scaler)

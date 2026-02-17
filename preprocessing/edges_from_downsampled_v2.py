@@ -20,7 +20,7 @@ _proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if _proj_root not in sys.path:
     sys.path.insert(0, _proj_root)
 
-from src.airfrans_utils import build_bc_masks_airfrans
+from src.preprocessing import build_bc_masks_airfrans
 
 
 def _import_preprocess_module(path: Optional[str] = None):

@@ -2,7 +2,7 @@ import os
 import glob
 import torch
 
-from physics_loss import div_from_edge_flux
+from src.physics_loss import div_from_edge_flux
 
 
 def _find_one_graph(root_dirs):

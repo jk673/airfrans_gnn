@@ -57,7 +57,7 @@ from src.training_common import (
     load_and_prepare_data, compute_loss_with_physics,
     create_lr_scheduler,
 )
-from src.navier_stokes_physics_loss import NavierStokesPhysicsLoss
+from src.physics_loss import NavierStokesPhysicsLoss
 from src.global_context_processor import EnhancedCFDModelWithGlobalContext
 
 import optuna

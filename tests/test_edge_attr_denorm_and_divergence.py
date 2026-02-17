@@ -3,7 +3,7 @@ from torch_geometric.data import Data
 from typing import cast
 
 from src.preprocess_airfrans_edges import Params, build_edges_for_graph
-from physics_loss import div_from_edge_flux
+from src.physics_loss import div_from_edge_flux
 
 
 def make_positions_grid(nx=10, ny=10, h=0.1):

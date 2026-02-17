@@ -49,7 +49,7 @@ from src.training_common import (
     create_lr_scheduler,
     init_wandb,
 )
-from src.turbulent_modeling_physics_loss import EnhancedPhysicsLoss
+from src.turbulent_physics_loss import EnhancedPhysicsLoss
 from src.global_context_processor import UltraEnhancedCFDModel
 from src.train_loop import train_with_scheduler
 from src.prediction import evaluate_model, predict_one_for_viz

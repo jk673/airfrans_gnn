@@ -10,7 +10,7 @@ class Data:
     def __setattr__(self, name, value):
         object.__setattr__(self, name, value)
 
-from loss_v3 import ComprehensivePhysicsLoss
+from src.physics_loss import ComprehensivePhysicsLoss
 
 def make_grid(nx=5, ny=5, h=1.0):
     xs = torch.arange(nx, dtype=torch.float32)
