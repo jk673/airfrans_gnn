@@ -86,7 +86,27 @@ python scripts/optuna_hpo.py \
     --viz-dir visualizations
 ```
 
-### 4. 모델 평가
+### 4. 실험 문서 리셋
+
+`scripts/reset_experiment_docs.py`를 이용해 실험 로그(`experiments/EXPERIMENT_LOG.md`)와
+`docs/optuna/EXAMPLES_OPTUNA.md`를 초기 상태로 재생성할 수 있습니다.
+
+```bash
+# 기본 동작: 기존 파일 백업 후 리셋
+python scripts/reset_experiment_docs.py
+
+# 백업 없이 즉시 덮어쓰기
+python scripts/reset_experiment_docs.py --no-backup
+
+# 실행 전 변경사항 미리보기
+python scripts/reset_experiment_docs.py --dry-run
+
+# 일부 파일만 리셋
+python scripts/reset_experiment_docs.py --skip-optuna-doc
+python scripts/reset_experiment_docs.py --skip-experiment-log
+```
+
+### 5. 모델 평가
 
 ```bash
 python scripts/eval_cp.py \
