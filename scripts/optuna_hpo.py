@@ -57,12 +57,9 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler
 
-from src.training_common import (
-    SmokeCfg, DataBundle,
-    set_seed, collate_pyg,
-    load_and_prepare_data, compute_loss_with_physics,
-    create_lr_scheduler,
-)
+from src.config import SmokeCfg
+from src.data import DataBundle, collate_pyg, load_and_prepare_data
+from src.training import set_seed, compute_loss_with_physics, create_lr_scheduler
 from src.physics_loss import NavierStokesPhysicsLoss
 from src.global_context_processor import EnhancedCFDModelWithGlobalContext
 

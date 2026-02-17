@@ -2,7 +2,7 @@ import torch
 from torch_geometric.data import Data
 from typing import cast
 
-from src.preprocess_airfrans_edges import Params, build_edges_for_graph
+from src.edge_construction import Params, build_edges_for_graph
 from src.physics_loss import div_from_edge_flux
 
 
@@ -32,7 +32,7 @@ def test_edge_attr_dxdy_schema_and_divergence_constant_field():
         gc_interval=1, max_active_futures=0
     )
 
-    data = build_edges_for_graph(data, p)
+    data, _ = build_edges_for_graph(data, p)
 
     # Ensure auxiliary schema exists
     assert hasattr(data, 'edge_attr_dxdy'), 'edge_attr_dxdy not present'
@@ -81,7 +81,7 @@ def test_edge_attr_dxdy_scaling_effect():
         filter_contains=None, sequential=True, chunk_size=1, mem_highwater=100.0,
         gc_interval=1, max_active_futures=0
     )
-    data = build_edges_for_graph(data, p)
+    data, _ = build_edges_for_graph(data, p)
     N = pos.size(0)
 
     vel = torch.tensor([[1.0, 0.0], [1.0, 0.0]], dtype=torch.float32)

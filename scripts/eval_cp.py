@@ -34,7 +34,8 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from src.training_common import SmokeCfg, load_and_prepare_data, collate_pyg, NormalizedDataset
+from src.config import SmokeCfg
+from src.data import load_and_prepare_data, collate_pyg, NormalizedDataset
 from src.global_context_processor import EnhancedCFDModelWithGlobalContext
 from src.utils import _prep_graph_for_norm
 from src.metrics import (

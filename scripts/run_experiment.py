@@ -24,10 +24,9 @@ import torch
 from torch.amp.grad_scaler import GradScaler
 from torch.utils.data import DataLoader
 
-from src.training_common import (
-    SmokeCfg, load_and_prepare_data, collate_pyg, NormalizedDataset,
-    set_seed, train_epoch, run_epoch, create_lr_scheduler,
-)
+from src.config import SmokeCfg
+from src.data import load_and_prepare_data, collate_pyg, NormalizedDataset
+from src.training import set_seed, train_epoch, run_epoch, create_lr_scheduler
 from src.global_context_processor import EnhancedCFDModelWithGlobalContext
 from src.physics_loss import NavierStokesPhysicsLoss
 from src.utils import _prep_graph_for_norm

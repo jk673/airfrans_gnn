@@ -7,7 +7,7 @@ from typing import Optional
 # Local imports
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from src.physics_loss import NavierStokesPhysicsLoss
-from src.preprocess_airfrans_edges import Params, build_edges_for_graph
+from src.edge_construction import Params, build_edges_for_graph
 
 try:
     from torch_geometric.datasets import AirfRANS
@@ -130,7 +130,7 @@ def main():
         # Build edges and dx,dy features if not present
         try:
             if not hasattr(d, 'edge_index') or d.edge_index is None or d.edge_index.numel() == 0 or not hasattr(d, 'edge_attr_dxdy'):
-                d = build_edges_for_graph(d, p)
+                d, _ = build_edges_for_graph(d, p)
         except Exception as e:
             print(f"[#{i}] WARN: failed to build edges: {e}")
             continue

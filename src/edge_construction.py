@@ -24,11 +24,41 @@ try:
     import psutil
 except ImportError:
     psutil = None
-from src.preprocess_airfrans_edges import hash_pos, mem_usage_percent, parse_aoa_from_name
+
 
 SURF_KEY_NAME = 'surf'
 EDGE_FEAT_DIM = 5
 AOA_REGEX = re.compile(r"(-?\d+\.\d+)")
+
+
+def hash_pos(pos: torch.Tensor) -> str:
+    with torch.no_grad():
+        return hashlib.sha1(pos.detach().cpu().numpy().tobytes()).hexdigest()[:16]
+
+
+def mem_usage_percent() -> Optional[float]:
+    if psutil is None:
+        return None
+    try:
+        return psutil.virtual_memory().percent
+    except Exception:
+        return None
+
+
+def parse_aoa_from_name(name: str, index: int) -> Optional[float]:
+    parts = name.split('_')
+    nums = []
+    for tok in parts:
+        try:
+            nums.append(float(tok))
+        except ValueError:
+            continue
+    if not nums:
+        matches = AOA_REGEX.findall(name)
+        nums = [float(m) for m in matches]
+    if len(nums) > index:
+        return nums[index]
+    return None
 
 
 @dataclass

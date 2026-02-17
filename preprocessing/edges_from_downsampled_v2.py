@@ -27,7 +27,7 @@ def _import_preprocess_module(path: Optional[str] = None):
     import importlib.util, sys
     if path is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            '..', 'src', 'preprocess_airfrans_edges_v2.py')
+                            '..', 'src', 'edge_construction.py')
     path = os.path.abspath(path)
     spec = importlib.util.spec_from_file_location('pre_air_v2', path)
     if spec is None or spec.loader is None:

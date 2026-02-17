@@ -41,14 +41,9 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
-from src.training_common import (
-    load_and_prepare_data,
-    create_lr_scheduler,
-    init_wandb,
-    collate_pyg,
-    set_seed,
-)
-from src.train_config import parse_args, create_config_from_args
+from src.data import load_and_prepare_data, collate_pyg
+from src.training import create_lr_scheduler, init_wandb, set_seed
+from src.config import parse_args, create_config_from_args
 from src.ddp_utils import (
     _is_ddp,
     _ddp_rank,
@@ -59,7 +54,7 @@ from src.ddp_utils import (
     cleanup_ddp,
     _unwrap_model,
 )
-from src.train_loop import train_with_scheduler
+from src.training import train_with_scheduler
 from src.benchmark import run_benchmark_and_log_experiment
 from src.diagnostics import plot_inlet_bc_velocity
 from src.prediction import predict_one_for_viz, evaluate_model

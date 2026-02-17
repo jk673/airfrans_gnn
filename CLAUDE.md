@@ -104,9 +104,9 @@ Physics weights ramp up over training via linear or cosine curriculum schedule. 
 
 | File | Purpose |
 |------|---------|
-| `src/config.py` | `SmokeCfg` dataclass, config file loading (`load_config_file`, `apply_config_dict`) |
+| `src/config.py` | `SmokeCfg` dataclass, config file loading, CLI parsing (`parse_args`, `create_config_from_args`) |
 | `src/data.py` | `StandardScaler`, `NormalizedDataset`, `DataBundle`, `load_and_prepare_data`, `collate_pyg` |
-| `src/training.py` | `train_epoch`, `run_epoch`, `compute_loss_with_physics`, LR scheduler, wandb init |
+| `src/training.py` | `train_epoch`, `run_epoch`, `compute_loss_with_physics`, `train_with_scheduler`, LR scheduler, wandb init |
 | `src/preprocessing.py` | Physics preprocessing (BC masks, node areas, wall normals, edge geometry) |
 | `src/physics_loss.py` | `NavierStokesPhysicsLoss` — RANS physics loss with curriculum scheduling |
 | `src/turbulent_physics_loss.py` | `EnhancedPhysicsLoss` — turbulence model extensions |
@@ -119,8 +119,7 @@ Physics weights ramp up over training via linear or cosine curriculum schedule. 
 | `src/metrics.py` | Surface mask detection, force coefficient computation |
 | `src/prediction.py` | Model inference helpers |
 | `src/visualization.py` | Prediction vs. ground-truth plotting |
-| `src/training_common.py` | Backward-compat shim — re-exports from `config`, `data`, `training` |
-| `src/preprocess_airfrans_edges.py` | Radius-graph edge building, degree floor enforcement, edge features |
+| `src/edge_construction.py` | Radius-graph edge building, degree floor enforcement, edge features, QA reports |
 | `preprocessing/build_edges_from_downsampled.py` | Edge construction wrapper (CLI) |
 | `benchmark/benchmark_reference.json` | FLOW-GLIDE 논문의 10개 baseline 메트릭 |
 | `scripts/score_benchmark.py` | CLI 벤치마크 스코어링 (6개 메트릭 계산 + 비교 테이블) |
@@ -131,7 +130,7 @@ The codebase supports two edge feature orderings detected automatically:
 - `[dist, dir_x, dir_y]` (default)
 - `[dx, dy, dist]` (dxdy format)
 
-Detection heuristic is in `src/preprocess_airfrans_edges.py` based on column value ranges.
+Detection heuristic is in `src/edge_construction.py` based on column value ranges.
 
 ### Batching
 

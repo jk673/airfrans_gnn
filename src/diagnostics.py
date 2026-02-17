@@ -12,7 +12,7 @@ import torch
 from torch_geometric.data import Data
 import matplotlib.pyplot as plt
 
-from src.training_common import DataBundle
+from src.data import DataBundle
 from src.prediction import predict_one_local
 from src.preprocessing import build_bc_masks_airfrans
 

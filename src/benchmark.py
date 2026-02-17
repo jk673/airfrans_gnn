@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 from torch.utils.data import DataLoader
 
-from src.training_common import DataBundle, NormalizedDataset, collate_pyg
+from src.data import DataBundle, NormalizedDataset, collate_pyg
 from src.utils import _prep_graph_for_norm
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

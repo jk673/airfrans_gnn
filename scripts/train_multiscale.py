@@ -43,22 +43,12 @@ os.chdir(PROJECT_ROOT)
 import torch
 import wandb
 
-from src.training_common import (
-    SmokeCfg,
-    apply_config_dict,
-    DEFAULT_CONFIG_PATH,
-    set_seed,
-    get_lr,
-    load_and_prepare_data,
-    run_epoch,
-    train_epoch,
-    load_config_file,
-    create_lr_scheduler,
-    init_wandb,
-)
+from src.config import SmokeCfg, apply_config_dict, DEFAULT_CONFIG_PATH, load_config_file
+from src.data import load_and_prepare_data
+from src.training import set_seed, get_lr, run_epoch, train_epoch, create_lr_scheduler, init_wandb
 from src.turbulent_physics_loss import EnhancedPhysicsLoss
 from src.global_context_processor import UltraEnhancedCFDModel
-from src.train_loop import train_with_scheduler
+from src.training import train_with_scheduler
 from src.prediction import evaluate_model, predict_one_for_viz
 from src.visualization import plot_pred_vs_gt
 
