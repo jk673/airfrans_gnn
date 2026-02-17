@@ -1,7 +1,8 @@
 # 2a) Utilities: pos2 append, surface mask, and edge features
+import numpy as np
 import torch
+from matplotlib.path import Path
 from torch_geometric.data import Data
-from src.airfrans_utils import _to_xy
 
 
 

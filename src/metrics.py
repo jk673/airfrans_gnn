@@ -186,7 +186,7 @@ def surface_volume_masks_from_orig(data: Data) -> Tuple[torch.Tensor, torch.Tens
 
 
 # ============================================================================
-# Force Coefficients (from src/force_coefficients_calculation.py + 01_trainer.ipynb)
+# Force Coefficients (from src/force_coefficients.py + 01_trainer.ipynb)
 # ============================================================================
 
 def order_surface(pos_surf: torch.Tensor) -> torch.Tensor:

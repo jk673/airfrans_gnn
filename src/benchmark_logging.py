@@ -28,7 +28,7 @@ def run_benchmark_and_log_experiment(
     tracker=None,
 ):
     """Compute FLOW-GLIDE benchmark metrics, log experiment, and update table."""
-    from experiment_tracker import ExperimentTracker
+    from src.experiment_tracker import ExperimentTracker
     from scripts.score_benchmark import score_test_set
 
     tracker = tracker or ExperimentTracker(

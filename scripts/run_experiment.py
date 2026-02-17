@@ -32,7 +32,7 @@ from src.global_context_processor import EnhancedCFDModelWithGlobalContext
 from src.navier_stokes_physics_loss import NavierStokesPhysicsLoss
 from src.utils import _prep_graph_for_norm
 from scripts.score_benchmark import score_test_set
-from experiment_tracker import ExperimentTracker
+from src.experiment_tracker import ExperimentTracker
 
 
 def parse_args():
