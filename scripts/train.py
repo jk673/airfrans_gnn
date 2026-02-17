@@ -60,8 +60,8 @@ from src.ddp_utils import (
     _unwrap_model,
 )
 from src.train_loop import train_with_scheduler
-from src.benchmark_logging import run_benchmark_and_log_experiment
-from src.diagnostic_plots import plot_inlet_bc_velocity
+from src.benchmark import run_benchmark_and_log_experiment
+from src.diagnostics import plot_inlet_bc_velocity
 from src.prediction import predict_one_for_viz, evaluate_model
 from src.visualization import plot_pred_vs_gt
 from src.navier_stokes_physics_loss import NavierStokesPhysicsLoss

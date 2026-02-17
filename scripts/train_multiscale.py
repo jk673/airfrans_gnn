@@ -51,12 +51,9 @@ from src.training_common import (
 )
 from src.turbulent_modeling_physics_loss import EnhancedPhysicsLoss
 from src.global_context_processor import UltraEnhancedCFDModel
-from scripts.train import (
-    train_with_scheduler,
-    evaluate_model,
-    _predict_one_for_viz,
-    plot_pred_vs_gt,
-)
+from src.train_loop import train_with_scheduler
+from src.prediction import evaluate_model, predict_one_for_viz
+from src.visualization import plot_pred_vs_gt
 
 
 # ---------------------------------------------------------------------------
@@ -406,7 +403,7 @@ def main():
         train_edges = data_bundle.train_graphs
         d_vis = val_edges[0] if len(val_edges) > 0 else (train_edges[0] if len(train_edges) > 0 else None)
         if d_vis is not None:
-            dm_vis_n, y_pred_vis_n = _predict_one_for_viz(
+            dm_vis_n, y_pred_vis_n = predict_one_for_viz(
                 d_vis, model, device, data_bundle.x_scaler, data_bundle.y_scaler)
             plot_pred_vs_gt(
                 dm_vis_n, y_pred_vis_n,
