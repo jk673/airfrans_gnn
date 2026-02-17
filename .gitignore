@@ -8,6 +8,9 @@ __pycache__/
 dist/
 build/
 
+#
+prompt*.md
+
 # Virtual environments
 .venv/
 
@@ -43,7 +46,7 @@ wandb/
 # Project data
 Dataset/
 downsampled_graphs/
-prebuilt_edges/
+prebuilt_edges_v2/
 processed_edges/
 *.pt
 *.png

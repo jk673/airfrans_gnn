@@ -150,10 +150,10 @@ ok "All critical packages verified"
 echo ""
 if [ -d "$PROJECT_DIR/Dataset" ]; then
     ok "Dataset directory found"
-elif [ -d "$PROJECT_DIR/prebuilt_edges" ]; then
-    ok "prebuilt_edges directory found (preprocessed data)"
+elif [ -d "$PROJECT_DIR/prebuilt_edges_v2" ]; then
+    ok "prebuilt_edges_v2 directory found (preprocessed data)"
 else
-    warn "No Dataset/ or prebuilt_edges/ directory found."
+    warn "No Dataset/ or prebuilt_edges_v2/ directory found."
     warn "Training requires the AirfRANS dataset. To download:"
     echo "    The dataset will be auto-downloaded on first run, or you can"
     echo "    manually place it in $PROJECT_DIR/Dataset/"

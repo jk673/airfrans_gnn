@@ -90,5 +90,5 @@ Each `.pt` file is a `torch_geometric.data.Data` object containing:
 After downsampling, build edges with:
 
 ```bash
-python build_edges_from_downsampled.py --in-dir downsampled_graphs --out-dir prebuilt_edges --task scarce
+python build_edges_from_downsampled.py --in-dir downsampled_graphs --out-dir prebuilt_edges_v2 --task scarce
 ```

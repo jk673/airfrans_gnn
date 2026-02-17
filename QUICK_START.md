@@ -51,7 +51,38 @@ source .venv/bin/activate
 
 ## 🚀 빠른 시작
 
-### 1. 기본 학습 실행
+### 1. 데이터 전처리 준비 (압축 해제 + 다운샘플 + 엣지 생성)
+
+```bash
+# 준비 스크립트 실행 권한 부여 (최초 1회)
+chmod +x setup_proc_data.sh
+
+# 기본 실행 (Dataset/raw/AirfRANS.zip 사용, task=scarce)
+./setup_proc_data.sh
+```
+
+옵션 예시:
+
+```bash
+./setup_proc_data.sh \
+    --dataset-root Dataset \
+    --task scarce \
+    --downsampled-dir downsampled_graphs \
+    --edges-dir prebuilt_edges_v2 \
+    --python python
+```
+
+추가 태스크 실행 예시:
+
+```bash
+# full만 전처리
+./setup_proc_data.sh --task full
+
+# scarce + full 모두 전처리
+./setup_proc_data.sh --task all
+```
+
+### 2. 기본 학습 실행
 
 ```bash
 # 기본 설정으로 학습 시작
@@ -66,7 +97,55 @@ python scripts/train.py \
     --wandb-name my-experiment
 ```
 
-### 2. Multi-Scale 모델 학습
+### 3. DDP 분산 학습 (Multi-GPU)
+
+`train.py`는 `torchrun`으로 실행하면 자동으로 DDP 모드가 활성화됩니다.
+별도의 플래그 없이 `RANK`, `WORLD_SIZE`, `LOCAL_RANK` 환경변수가 감지되면 분산 학습이 시작됩니다.
+
+```bash
+# 단일 노드, GPU 2장
+torchrun --nproc_per_node=2 scripts/train.py \
+    --batch-size 4 \
+    --epochs 200 \
+    --lr 3e-4 \
+    --hidden 256
+
+# 단일 노드, GPU 4장 + 커스텀 설정
+torchrun --nproc_per_node=4 scripts/train.py \
+    --batch-size 2 \
+    --epochs 200 \
+    --lr 6e-4 \
+    --hidden 256 \
+    --wandb-name ddp-4gpu-run
+
+# 특정 GPU만 사용 (예: GPU 0, 2)
+CUDA_VISIBLE_DEVICES=0,2 torchrun --nproc_per_node=2 scripts/train.py \
+    --batch-size 4 \
+    --epochs 200
+```
+
+**참고사항:**
+- `--batch-size`는 **GPU당** 배치 크기입니다. 전체 effective batch size = `batch-size × nproc_per_node`
+- 학습률은 GPU 수에 비례하여 선형 스케일링하는 것을 권장합니다 (예: 2 GPU → `lr × 2`)
+- 체크포인트 저장, wandb 로깅, 평가는 rank 0 프로세스에서만 수행됩니다
+- NCCL 백엔드를 사용하므로 NVIDIA GPU + CUDA 환경이 필수입니다
+
+### 4. GPU 모니터링 (`gpu_monitor.sh`)
+
+학습 중 GPU 사용률/메모리/온도/전력을 빠르게 확인할 수 있습니다.
+
+```bash
+# 1회 출력
+./gpu_monitor.sh
+
+# 2초마다 갱신
+./gpu_monitor.sh --watch 2
+
+# 도움말
+./gpu_monitor.sh --help
+```
+
+### 5. Multi-Scale 모델 학습
 
 ```bash
 python scripts/train_multiscale.py \
@@ -76,7 +155,7 @@ python scripts/train_multiscale.py \
     --num-multiscale-layers 4
 ```
 
-### 3. 하이퍼파라미터 최적화
+### 6. 하이퍼파라미터 최적화
 
 ```bash
 python scripts/optuna_hpo.py \
@@ -86,7 +165,7 @@ python scripts/optuna_hpo.py \
     --viz-dir visualizations
 ```
 
-### 4. 실험 문서 리셋
+### 7. 실험 문서 리셋
 
 `scripts/reset_experiment_docs.py`를 이용해 실험 로그(`experiments/EXPERIMENT_LOG.md`)와
 `docs/optuna/EXAMPLES_OPTUNA.md`를 초기 상태로 재생성할 수 있습니다.
@@ -106,7 +185,7 @@ python scripts/reset_experiment_docs.py --skip-optuna-doc
 python scripts/reset_experiment_docs.py --skip-experiment-log
 ```
 
-### 5. 모델 평가
+### 8. 모델 평가
 
 ```bash
 python scripts/eval_cp.py \

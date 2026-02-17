@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import os
 import math
+from pathlib import Path
 from typing import List
 
 import numpy as np
@@ -42,6 +43,9 @@ from src.metrics import (
     surface_mask_from_x_phys,
     aggregate_cp_relative_l2_stats,
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PREBUILT_ROOT = PROJECT_ROOT / "prebuilt_edges_v2"
 
 
 def parse_args():
@@ -65,7 +69,7 @@ def parse_args():
         type=str,
         default="val",
         choices=["val", "test"],
-        help="Split to evaluate: 'val' (training validation) or 'test' (prebuilt_edges/<task>/test)",
+        help="Split to evaluate: 'val' (training validation) or 'test' (prebuilt_edges_v2/<task>/test)",
     )
     parser.add_argument(
         "--surface-only",
@@ -255,7 +259,7 @@ def main():
     print(f"  Surface only: {args.surface_only}")
 
     # Load data
-    prebuilt_dir = os.path.join("prebuilt_edges", scfg.task)
+    prebuilt_dir = str(PREBUILT_ROOT / scfg.task)
     if not os.path.isdir(prebuilt_dir):
         raise FileNotFoundError(
             f"Missing prebuilt edges at {prebuilt_dir}. "

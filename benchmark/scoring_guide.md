@@ -157,7 +157,7 @@ surf_rel_l2 = sqrt(Σ_graphs Σ_surf_nodes (p_pred - p_gt)²)
 2. **`--hidden`/`--layers` 불일치**: 체크포인트와 CLI 인자가 다르면 `state_dict` 로드 실패.
    훈련 시 사용한 정확한 값을 전달해야 함.
 
-3. **Task 일치**: `--task`는 `prebuilt_edges/<task>/test/`의 데이터를 로드함.
+3. **Task 일치**: `--task`는 `prebuilt_edges_v2/<task>/test/`의 데이터를 로드함.
    훈련 task와 반드시 일치해야 함.
 
 4. **배치 사이즈**: `--batch-size 1` 권장. >1이면 force coefficient 계산 시

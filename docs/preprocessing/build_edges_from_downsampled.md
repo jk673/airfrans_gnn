@@ -51,16 +51,16 @@ python build_edges_from_downsampled.py --in-dir <input> --out-dir <output> [OPTI
 ```bash
 # Default: build edges for scarce split
 python build_edges_from_downsampled.py \
-    --in-dir downsampled_graphs --out-dir prebuilt_edges --task scarce
+    --in-dir downsampled_graphs --out-dir prebuilt_edges_v2 --task scarce
 
 # Wider radius with stronger isolated-node recovery
 python build_edges_from_downsampled.py \
-    --in-dir downsampled_graphs --out-dir prebuilt_edges \
+    --in-dir downsampled_graphs --out-dir prebuilt_edges_v2 \
     --global-radius 0.03 --min-degree 3 --knn-backup-k 6
 
 # Full split with denormalization
 python build_edges_from_downsampled.py \
-    --in-dir downsampled_graphs --out-dir prebuilt_edges \
+    --in-dir downsampled_graphs --out-dir prebuilt_edges_v2 \
     --task full --denormalize
 ```
 
