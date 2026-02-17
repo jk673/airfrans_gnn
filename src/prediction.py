@@ -213,6 +213,47 @@ def predict_one_for_viz(
 
 
 @torch.no_grad()
+def evaluate_model(model, device, data_bundle, scfg):
+    """Evaluate model on validation graphs and print MSE statistics.
+
+    Args:
+        model: Trained GNN model (unwrapped, not DDP).
+        device: Computation device.
+        data_bundle: DataBundle with val_graphs, train_graphs, x_scaler, y_scaler.
+        scfg: SmokeCfg (uses scfg.amp).
+    """
+    x_scaler = data_bundle.x_scaler
+    y_scaler = data_bundle.y_scaler
+    val_edges = data_bundle.val_graphs
+    train_edges = data_bundle.train_graphs
+
+    if isinstance(val_edges, list) and len(val_edges) > 0:
+        d_eval = val_edges[0]
+    else:
+        d_eval = train_edges[0] if len(train_edges) > 0 else None
+
+    if d_eval is None:
+        print('No sample available for MSE computation')
+        return
+
+    d_orig = d_eval
+    dm_eval_norm, y_pred_eval_norm = predict_one_local(
+        d_orig, model, x_scaler, y_scaler, device, scfg.amp,
+    )
+    surf_mask, vol_mask = surface_volume_masks_from_orig(d_orig)
+
+    assert isinstance(dm_eval_norm.y, torch.Tensor), 'y must be a Tensor'
+    names = ['u', 'v', 'p_over_rho', 'nu_t']
+    mse_all = mse_per_channel(y_pred_eval_norm, dm_eval_norm.y, None)
+    mse_surf = mse_per_channel(y_pred_eval_norm, dm_eval_norm.y, surf_mask)
+    mse_vol = mse_per_channel(y_pred_eval_norm, dm_eval_norm.y, vol_mask)
+
+    print('[MSE | ALL   | normalized]', {n: f'{v:.4e}' for n, v in zip(names, mse_all)})
+    print('[MSE | SURF  | normalized]', {n: f'{v:.4e}' for n, v in zip(names, mse_surf)})
+    print('[MSE | VOLUME| normalized]', {n: f'{v:.4e}' for n, v in zip(names, mse_vol)})
+
+
+@torch.no_grad()
 def mse_per_channel(
     y_pred: torch.Tensor,
     y_true: torch.Tensor,
