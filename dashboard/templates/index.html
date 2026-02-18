@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AirfRANS Training Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#1a1a2e; color:#eee; font-family:'Courier New',monospace; }
+
+  /* ── Header ── */
+  header { padding:16px 24px; border-bottom:1px solid #333; display:flex; align-items:center; justify-content:space-between; }
+  header h1 { font-size:1.2em; }
+  .tabs { display:flex; gap:4px; }
+  .tabs button {
+    background:#16213e; color:#aaa; border:none; padding:8px 18px;
+    cursor:pointer; font-family:inherit; font-size:0.85em; border-radius:6px 6px 0 0;
+    transition: background .15s, color .15s;
+  }
+  .tabs button:hover { color:#eee; }
+  .tabs button.active { background:#4ecca3; color:#1a1a2e; font-weight:bold; }
+
+  /* ── Tab panels ── */
+  .tab-panel { display:none; padding:16px; }
+  .tab-panel.active { display:block; }
+
+  /* ── Config tab ── */
+  .config-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:14px;
+    max-width:1100px; margin:0 auto;
+  }
+  .config-group {
+    background:#16213e; border-radius:8px; padding:14px;
+  }
+  .config-group h3 {
+    font-size:0.85em; color:#4ecca3; margin-bottom:10px;
+    text-transform:uppercase; letter-spacing:1px;
+  }
+  .config-group.wide { grid-column: 1 / -1; }
+  .field-row {
+    display:flex; align-items:center; gap:8px; margin-bottom:6px;
+  }
+  .field-row label {
+    flex:0 0 160px; font-size:0.8em; color:#a8a8b3; text-align:right;
+  }
+  .field-row input, .field-row select, .field-row textarea {
+    flex:1; background:#0f1a2e; border:1px solid #333; color:#eee;
+    padding:5px 8px; border-radius:4px; font-family:inherit; font-size:0.85em;
+  }
+  .field-row input[type="checkbox"] { flex:0; width:18px; height:18px; }
+  .field-row textarea { min-height:48px; resize:vertical; }
+  .field-row input:focus, .field-row select:focus, .field-row textarea:focus {
+    outline:none; border-color:#4ecca3;
+  }
+
+  .btn-row { text-align:center; margin-top:16px; }
+  .btn {
+    padding:10px 28px; border:none; border-radius:6px; cursor:pointer;
+    font-family:inherit; font-size:0.9em; font-weight:bold;
+    transition: background .15s, opacity .15s;
+  }
+  .btn:disabled { opacity:0.4; cursor:not-allowed; }
+  .btn-start { background:#4ecca3; color:#1a1a2e; margin-right:8px; }
+  .btn-start:hover:not(:disabled) { background:#3bbb92; }
+  .btn-stop { background:#e74c3c; color:#fff; }
+  .btn-stop:hover:not(:disabled) { background:#c0392b; }
+
+  /* ── Training tab ── */
+  .status-bar {
+    background:#16213e; border-radius:8px; padding:12px 20px;
+    margin-bottom:14px; display:flex; align-items:center; gap:16px;
+    flex-wrap:wrap;
+  }
+  .status-bar .state-badge {
+    padding:4px 10px; border-radius:4px; font-size:0.8em; font-weight:bold;
+    text-transform:uppercase;
+  }
+  .state-idle { background:#555; color:#ccc; }
+  .state-loading { background:#f39c12; color:#1a1a2e; }
+  .state-training { background:#3b82f6; color:#fff; }
+  .state-benchmarking { background:#a855f7; color:#fff; }
+  .state-completed { background:#4ecca3; color:#1a1a2e; }
+  .state-failed { background:#e74c3c; color:#fff; }
+  .state-stopping { background:#f97316; color:#1a1a2e; }
+  .status-bar .info { font-size:0.85em; color:#a8a8b3; }
+  .error-msg { color:#e74c3c; font-size:0.85em; margin-top:4px; }
+  .chart-grid {
+    display:grid; grid-template-columns:repeat(3,1fr); gap:14px;
+  }
+  .cb { background:#16213e; border-radius:8px; padding:14px; }
+  .cb h3 { font-size:0.85em; color:#a8a8b3; margin-bottom:8px; text-align:center; }
+  .chart-hint { text-align:center; color:#555; font-size:0.75em; margin-top:8px; }
+
+  /* ── Experiments tab ── */
+  .exp-table-wrap { overflow-x:auto; }
+  table.exp-table {
+    width:100%; border-collapse:collapse; font-size:0.8em;
+  }
+  table.exp-table th, table.exp-table td {
+    padding:8px 10px; text-align:right; border-bottom:1px solid #222;
+  }
+  table.exp-table th {
+    background:#16213e; color:#4ecca3; position:sticky; top:0;
+    text-align:right; font-size:0.8em; text-transform:uppercase;
+  }
+  table.exp-table th:first-child, table.exp-table td:first-child { text-align:left; }
+  table.exp-table tr:hover { background:#1e2d4a; }
+  table.exp-table tr.baseline { color:#888; }
+  table.exp-table tr.mine { color:#eee; cursor:pointer; }
+  table.exp-table tr.mine:hover { background:#1e3a5a; }
+
+  /* Experiment detail panel */
+  .exp-detail {
+    display:none; background:#16213e; border-radius:8px;
+    padding:16px; margin-top:14px; max-width:800px;
+  }
+  .exp-detail.visible { display:block; }
+  .exp-detail h3 { color:#4ecca3; margin-bottom:10px; font-size:0.9em; }
+  .detail-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:6px 20px; font-size:0.82em;
+  }
+  .detail-grid .lbl { color:#888; }
+  .detail-grid .val { color:#eee; }
+
+  /* ── Physics sub-group (3-column within config) ── */
+  .physics-grid {
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;
+  }
+  .physics-sub { background:#0f1a2e; border-radius:6px; padding:10px; }
+  .physics-sub h4 { font-size:0.8em; color:#a8a8b3; margin-bottom:8px; text-align:center; }
+
+  @media (max-width:900px) {
+    .config-grid { grid-template-columns:1fr; }
+    .chart-grid { grid-template-columns:1fr 1fr; }
+    .physics-grid { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AirfRANS Training Dashboard</h1>
+  <div class="tabs">
+    <button class="active" onclick="switchTab('config')">Config</button>
+    <button onclick="switchTab('training')">Training</button>
+    <button onclick="switchTab('experiments')">Experiments</button>
+  </div>
+</header>
+
+<!-- ═══════════════════════ CONFIG TAB ═══════════════════════ -->
+<div id="tab-config" class="tab-panel active">
+  <div class="config-grid" id="config-form"></div>
+  <div class="btn-row">
+    <button class="btn btn-start" id="btn-start" onclick="startTraining()">Start Training</button>
+    <button class="btn btn-stop" id="btn-stop" onclick="stopTraining()" disabled>Stop</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════ TRAINING TAB ═══════════════════════ -->
+<div id="tab-training" class="tab-panel">
+  <div class="status-bar">
+    <span class="state-badge state-idle" id="state-badge">IDLE</span>
+    <span class="info" id="status-info">No training running</span>
+  </div>
+  <div id="error-area"></div>
+  <div class="chart-grid">
+    <div class="cb"><h3>Total Loss</h3><canvas id="c-total_loss"></canvas></div>
+    <div class="cb"><h3>MSE Loss</h3><canvas id="c-mse_loss"></canvas></div>
+    <div class="cb"><h3>Continuity</h3><canvas id="c-continuity_loss"></canvas></div>
+    <div class="cb"><h3>Momentum</h3><canvas id="c-momentum_loss"></canvas></div>
+    <div class="cb"><h3>BC Loss</h3><canvas id="c-bc_loss"></canvas></div>
+    <div class="cb"><h3>Learning Rate</h3><canvas id="c-lr"></canvas></div>
+  </div>
+  <p class="chart-hint">Scroll to zoom | Drag to pan | Double-click to reset</p>
+</div>
+
+<!-- ═══════════════════════ EXPERIMENTS TAB ═══════════════════════ -->
+<div id="tab-experiments" class="tab-panel">
+  <div class="exp-table-wrap">
+    <table class="exp-table" id="exp-table">
+      <thead><tr>
+        <th>Model</th>
+        <th>Vol Rel.L₂ ↓</th><th>Surf Rel.L₂ ↓</th>
+        <th>CD Rel.Err ↓</th><th>CL Rel.Err ↓</th>
+        <th>ρ_D ↑</th><th>ρ_L ↑</th>
+        <th>Task</th><th>H</th><th>L</th><th>Params</th><th>Notes</th>
+      </tr></thead>
+      <tbody id="exp-tbody"></tbody>
+    </table>
+  </div>
+  <div class="exp-detail" id="exp-detail">
+    <h3 id="exp-detail-title">Experiment Detail</h3>
+    <div class="detail-grid" id="exp-detail-grid"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelector(`.tabs button[onclick="switchTab('${name}')"]`).classList.add('active');
+  if (name === 'experiments') loadExperiments();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIG FORM — dynamically built from /api/config
+// ═══════════════════════════════════════════════════════════════
+let configSchema = {};
+
+async function loadConfig() {
+  const res = await fetch('/api/config');
+  configSchema = await res.json();
+  renderConfigForm(configSchema);
+}
+
+function renderConfigForm(schema) {
+  const container = document.getElementById('config-form');
+  container.innerHTML = '';
+
+  for (const [groupName, groupFields] of Object.entries(schema)) {
+    if (groupName === 'physics') {
+      // Physics gets special 3-column layout
+      const div = document.createElement('div');
+      div.className = 'config-group wide';
+      div.innerHTML = '<h3>Physics</h3><div class="physics-grid"></div>';
+      const grid = div.querySelector('.physics-grid');
+
+      for (const [compName, compFields] of Object.entries(groupFields)) {
+        const sub = document.createElement('div');
+        sub.className = 'physics-sub';
+        sub.innerHTML = `<h4>${compName}</h4>`;
+        for (const [key, spec] of Object.entries(compFields)) {
+          sub.appendChild(makeFieldRow(`physics.${compName}.${key}`, key, spec));
+        }
+        grid.appendChild(sub);
+      }
+      container.appendChild(div);
+    } else {
+      const div = document.createElement('div');
+      div.className = 'config-group';
+      div.innerHTML = `<h3>${groupName}</h3>`;
+      for (const [key, spec] of Object.entries(groupFields)) {
+        div.appendChild(makeFieldRow(`${groupName}.${key}`, key, spec));
+      }
+      container.appendChild(div);
+    }
+  }
+}
+
+function makeFieldRow(id, label, spec) {
+  const row = document.createElement('div');
+  row.className = 'field-row';
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  lbl.setAttribute('for', 'cfg-' + id);
+  row.appendChild(lbl);
+
+  let input;
+  if (spec.type === 'select') {
+    input = document.createElement('select');
+    for (const opt of spec.options) {
+      const o = document.createElement('option');
+      o.value = opt; o.textContent = opt;
+      if (opt === spec.value) o.selected = true;
+      input.appendChild(o);
+    }
+  } else if (spec.type === 'bool') {
+    input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = spec.value;
+  } else if (spec.type === 'text') {
+    input = document.createElement('textarea');
+    input.value = spec.value;
+  } else {
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = spec.value;
+  }
+  input.id = 'cfg-' + id;
+  input.dataset.path = id;
+  input.dataset.dtype = spec.type;
+  row.appendChild(input);
+  return row;
+}
+
+function collectConfig() {
+  const cfg = {};
+  document.querySelectorAll('[data-path]').forEach(el => {
+    const path = el.dataset.path;
+    const dtype = el.dataset.dtype;
+    let val;
+    if (dtype === 'bool') val = el.checked;
+    else if (dtype === 'int') val = parseInt(el.value, 10);
+    else if (dtype === 'float') val = parseFloat(el.value);
+    else val = el.value;
+
+    // Flatten: "physics.continuity.weight" → cfg.continuity.weight
+    // All others: "model.hidden_dim" → cfg.hidden_dim
+    const parts = path.split('.');
+    if (parts[0] === 'physics') {
+      // physics.comp.key → cfg[comp][key]
+      const comp = parts[1], key = parts[2];
+      if (!cfg[comp]) cfg[comp] = {};
+      cfg[comp][key] = val;
+    } else {
+      // group.key → cfg[key]
+      cfg[parts[parts.length - 1]] = val;
+    }
+  });
+  return cfg;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// START / STOP
+// ═══════════════════════════════════════════════════════════════
+async function startTraining() {
+  const cfg = collectConfig();
+  const btnStart = document.getElementById('btn-start');
+  const btnStop = document.getElementById('btn-stop');
+  btnStart.disabled = true;
+
+  try {
+    const res = await fetch('/api/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(cfg),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      btnStop.disabled = false;
+      switchTab('training');
+    } else {
+      alert(data.message || 'Failed to start');
+      btnStart.disabled = false;
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+    btnStart.disabled = false;
+  }
+}
+
+async function stopTraining() {
+  const res = await fetch('/api/stop', {method: 'POST'});
+  const data = await res.json();
+  if (!res.ok) alert(data.message || 'Failed to stop');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CHARTS — create once, update data
+// ═══════════════════════════════════════════════════════════════
+const charts = {};
+const LOSS_KEYS = ['total_loss', 'mse_loss', 'continuity_loss', 'momentum_loss', 'bc_loss'];
+
+const zoomOpts = {
+  pan: {enabled: true, mode: 'xy'},
+  zoom: {wheel: {enabled: true}, pinch: {enabled: true}, mode: 'xy'},
+};
+const axOpts = {
+  x: {ticks: {color: '#888'}, grid: {color: '#222'}},
+  y: {ticks: {color: '#888'}, grid: {color: '#222'}},
+};
+
+function initCharts() {
+  for (const key of LOSS_KEYS) {
+    const ctx = document.getElementById('c-' + key);
+    charts[key] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {label: 'Train', data: [], borderColor: '#3b82f6', borderWidth: 1.5, pointRadius: 0, fill: false},
+          {label: 'Val', data: [], borderColor: '#f97316', borderWidth: 1.5, pointRadius: 0, fill: false},
+        ],
+      },
+      options: {responsive: true, animation: false, plugins: {legend: {labels: {color: '#ccc'}}, zoom: zoomOpts}, scales: axOpts},
+    });
+    ctx.addEventListener('dblclick', () => charts[key].resetZoom());
+  }
+  // LR chart
+  const lrCtx = document.getElementById('c-lr');
+  charts['lr'] = new Chart(lrCtx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{label: 'LR', data: [], borderColor: '#a855f7', borderWidth: 1.5, pointRadius: 0, fill: false}],
+    },
+    options: {responsive: true, animation: false, plugins: {legend: {labels: {color: '#ccc'}}, zoom: zoomOpts}, scales: axOpts},
+  });
+  lrCtx.addEventListener('dblclick', () => charts['lr'].resetZoom());
+}
+
+function updateCharts(metrics) {
+  if (!metrics || !metrics.epochs) return;
+  const epochs = metrics.epochs;
+
+  for (const key of LOSS_KEYS) {
+    const chart = charts[key];
+    chart.data.labels = epochs;
+    chart.data.datasets[0].data = (metrics.train && metrics.train[key]) || [];
+    chart.data.datasets[1].data = (metrics.val && metrics.val[key]) || [];
+    chart.update('none');
+  }
+  charts['lr'].data.labels = epochs;
+  charts['lr'].data.datasets[0].data = metrics.lr || [];
+  charts['lr'].update('none');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATUS POLLING
+// ═══════════════════════════════════════════════════════════════
+let lastState = 'idle';
+
+function updateStatusBar(data) {
+  const badge = document.getElementById('state-badge');
+  const info = document.getElementById('status-info');
+  const errArea = document.getElementById('error-area');
+  const btnStart = document.getElementById('btn-start');
+  const btnStop = document.getElementById('btn-stop');
+
+  const state = data.state || 'idle';
+  badge.textContent = state.toUpperCase();
+  badge.className = 'state-badge state-' + state;
+
+  const running = ['loading', 'training', 'benchmarking', 'stopping'].includes(state);
+  btnStart.disabled = running;
+  btnStop.disabled = !running;
+
+  if (state === 'idle') {
+    info.textContent = 'No training running';
+  } else if (state === 'loading') {
+    info.textContent = 'Loading data and building model...';
+  } else if (state === 'training' || state === 'stopping') {
+    const elapsed = data.elapsed_sec ? formatTime(data.elapsed_sec) : '0s';
+    const best = data.best_val < 1e10 ? data.best_val.toFixed(6) : '—';
+    const bestEp = data.best_epoch >= 0 ? data.best_epoch : '—';
+    info.textContent = `Epoch ${data.current_epoch}/${data.total_epochs} | Best val: ${best} @ epoch ${bestEp} | ${elapsed}`;
+  } else if (state === 'benchmarking') {
+    info.textContent = 'Running benchmark scoring...';
+  } else if (state === 'completed') {
+    const elapsed = data.elapsed_sec ? formatTime(data.elapsed_sec) : '';
+    info.textContent = `Completed! ${elapsed} | Experiment: ${data.experiment_id || '—'}`;
+  } else if (state === 'failed') {
+    info.textContent = 'Training failed';
+  }
+
+  errArea.innerHTML = '';
+  if (data.error_message) {
+    errArea.innerHTML = `<p class="error-msg">${escapeHtml(data.error_message)}</p>`;
+  }
+
+  // Auto-refresh experiments on completion
+  if (state === 'completed' && lastState !== 'completed') {
+    loadExperiments();
+  }
+  lastState = state;
+}
+
+function formatTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function pollStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    updateStatusBar(data);
+    if (['training', 'stopping'].includes(data.state)) {
+      updateCharts(data.metrics);
+    }
+  } catch (e) {
+    // silent
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EXPERIMENTS TABLE
+// ═══════════════════════════════════════════════════════════════
+const METRIC_KEYS = [
+  'volume_rel_l2', 'surface_rel_l2',
+  'cd_relative_error', 'cl_relative_error',
+  'rho_d', 'rho_l',
+];
+
+let experimentsData = [];
+
+async function loadExperiments() {
+  try {
+    const res = await fetch('/api/experiments');
+    const data = await res.json();
+    renderExperiments(data.baselines || {}, data.experiments || []);
+  } catch (e) {
+    // silent
+  }
+}
+
+function renderExperiments(baselines, experiments) {
+  const tbody = document.getElementById('exp-tbody');
+  tbody.innerHTML = '';
+
+  // Baselines
+  for (const [name, vals] of Object.entries(baselines)) {
+    const tr = document.createElement('tr');
+    tr.className = 'baseline';
+    tr.innerHTML = `<td>${escapeHtml(name)}</td>` +
+      METRIC_KEYS.map(k => `<td>${fmtMetric(vals[k])}</td>`).join('') +
+      '<td></td><td></td><td></td><td></td><td></td>';
+    tbody.appendChild(tr);
+  }
+
+  // Experiments
+  experimentsData = experiments;
+  for (let i = 0; i < experiments.length; i++) {
+    const exp = experiments[i];
+    const tr = document.createElement('tr');
+    tr.className = 'mine';
+    tr.onclick = () => showExpDetail(i);
+
+    const label = exp.model_name || exp.experiment_id || '—';
+    tr.innerHTML = `<td>${escapeHtml(label)}</td>` +
+      METRIC_KEYS.map(k => `<td>${fmtMetric(exp[k])}</td>`).join('') +
+      `<td>${escapeHtml(exp.task || '')}</td>` +
+      `<td>${exp.hidden != null ? exp.hidden : ''}</td>` +
+      `<td>${exp.layers != null ? exp.layers : ''}</td>` +
+      `<td>${exp.n_parameters != null ? fmtParams(exp.n_parameters) : ''}</td>` +
+      `<td>${escapeHtml(exp.notes || '')}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function fmtMetric(v) {
+  if (v == null || v === '') return '—';
+  const n = parseFloat(v);
+  if (isNaN(n)) return '—';
+  return n.toFixed(4);
+}
+
+function fmtParams(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return n.toString();
+}
+
+function showExpDetail(idx) {
+  const exp = experimentsData[idx];
+  if (!exp) return;
+
+  const panel = document.getElementById('exp-detail');
+  const title = document.getElementById('exp-detail-title');
+  const grid = document.getElementById('exp-detail-grid');
+
+  title.textContent = exp.experiment_id || 'Experiment';
+  grid.innerHTML = '';
+
+  const fields = [
+    ['Experiment ID', exp.experiment_id],
+    ['Timestamp', exp.timestamp],
+    ['Task', exp.task],
+    ['Hidden dim', exp.hidden],
+    ['Layers', exp.layers],
+    ['Parameters', exp.n_parameters != null ? fmtParams(exp.n_parameters) : '—'],
+    ['Duration', exp.duration_sec != null ? formatTime(exp.duration_sec) : '—'],
+    ['Notes', exp.notes],
+  ];
+
+  for (const [lbl, val] of fields) {
+    grid.innerHTML += `<span class="lbl">${escapeHtml(lbl)}</span><span class="val">${escapeHtml(String(val ?? '—'))}</span>`;
+  }
+
+  // Metrics
+  grid.innerHTML += '<span class="lbl" style="grid-column:1/-1;color:#4ecca3;margin-top:8px">── Metrics ──</span><span></span>';
+  for (const k of METRIC_KEYS) {
+    grid.innerHTML += `<span class="lbl">${escapeHtml(k)}</span><span class="val">${fmtMetric(exp[k])}</span>`;
+  }
+
+  panel.classList.add('visible');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+loadConfig();
+initCharts();
+pollStatus();
+setInterval(pollStatus, 3000);
+</script>
+</body>
+</html>

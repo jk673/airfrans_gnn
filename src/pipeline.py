@@ -273,7 +273,8 @@ class Trainer:
         self.dashboard_refresh_every = dashboard_refresh_every
         self.amp = amp
 
-    def fit(self, train_loader, val_loader, num_epochs: int, routine: dict[str, Callable]) -> dict:
+    def fit(self, train_loader, val_loader, num_epochs: int, routine: dict[str, Callable],
+            on_epoch_end: Callable | None = None) -> dict:
         torch.set_float32_matmul_precision("high")
         if torch.cuda.is_available():
             torch.backends.cuda.matmul.allow_tf32 = True
@@ -318,6 +319,14 @@ class Trainer:
 
             if dashboard is not None:
                 dashboard.update(epoch, train_logs, val_logs, lr, is_last=(epoch == num_epochs - 1))
+
+            if on_epoch_end is not None:
+                should_stop = on_epoch_end(epoch=epoch, train_logs=train_logs,
+                                           val_logs=val_logs, lr=lr, is_best=is_best)
+                if should_stop:
+                    history["train"].append(train_logs)
+                    history["val"].append(val_logs)
+                    break
 
             history["train"].append(train_logs)
             history["val"].append(val_logs)
