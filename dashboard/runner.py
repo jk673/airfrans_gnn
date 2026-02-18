@@ -26,9 +26,12 @@ def _resolve_device(requested: str) -> str:
         return requested
     if not torch.cuda.is_available():
         return "cpu"
-    # Guard against 'no kernel image' errors (architecture mismatch)
+    # Guard against 'no kernel image' errors (GPU arch mismatch, e.g. sm_120 on PyTorch 2.4)
     try:
-        torch.zeros(1, device="cuda")
+        t = torch.zeros(1, device="cuda")
+        # Force synchronous execution to catch async CUDA errors
+        torch.cuda.synchronize()
+        _ = (t + t).item()
         return "cuda"
     except RuntimeError:
         return "cpu"
@@ -115,6 +118,10 @@ class TrainingSession:
         try:
             self._set_state(state="loading")
 
+            # 0. Resolve device early (before any .to(device) calls)
+            device = _resolve_device(cfg.get("device", "cuda"))
+            amp = cfg.get("amp", True) if device == "cuda" else False
+
             # 1. Data
             data = load_airfrans_data(task=cfg.get("task", "scarce"), seed=cfg.get("seed", 42))
             bundle = convert_to_pyg(
@@ -135,7 +142,7 @@ class TrainingSession:
                     "dropout": cfg.get("dropout", 0.1),
                 },
                 "output": {"output_dim": 4},
-            })
+            }, device=device)
 
             # 3. Physics loss
             physics_cfg = {}
@@ -160,8 +167,6 @@ class TrainingSession:
             # 5. Train
             self._set_state(state="training")
             self._train_start = time.time()
-            device = _resolve_device(cfg.get("device", "cuda"))
-            amp = cfg.get("amp", True) if device == "cuda" else False
             trainer = Trainer(
                 model, optimizer, scheduler, criterion,
                 device=device, live_plot=False, amp=amp,
