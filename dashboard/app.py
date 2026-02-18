@@ -11,8 +11,6 @@ import json
 import sys
 from pathlib import Path
 
-from dashboard.runner import _resolve_device
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -73,7 +71,7 @@ DEFAULT_CONFIG = {
     },
     "training": {
         "num_epochs": {"value": 20, "type": "int"},
-        "device": {"value": _resolve_device("cuda"), "type": "select", "options": ["cuda", "cpu"]},
+        "device": {"value": "cuda", "type": "select", "options": ["cuda", "cpu"]},
         "amp": {"value": True, "type": "bool"},
     },
     "experiment": {

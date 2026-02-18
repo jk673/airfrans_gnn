@@ -20,23 +20,6 @@ from src.benchmark import run_benchmark_and_log_experiment
 LOSS_KEYS = ("total_loss", "mse_loss", "continuity_loss", "momentum_loss", "bc_loss")
 
 
-def _resolve_device(requested: str) -> str:
-    """Return a usable device, falling back to CPU if CUDA is unusable."""
-    if requested != "cuda":
-        return requested
-    if not torch.cuda.is_available():
-        return "cpu"
-    # Guard against 'no kernel image' errors (GPU arch mismatch, e.g. sm_120 on PyTorch 2.4)
-    try:
-        t = torch.zeros(1, device="cuda")
-        # Force synchronous execution to catch async CUDA errors
-        torch.cuda.synchronize()
-        _ = (t + t).item()
-        return "cuda"
-    except RuntimeError:
-        return "cpu"
-
-
 @dataclass
 class TrainingState:
     state: str = "idle"  # idle | loading | training | benchmarking | completed | failed | stopping
@@ -118,9 +101,9 @@ class TrainingSession:
         try:
             self._set_state(state="loading")
 
-            # 0. Resolve device early (before any .to(device) calls)
-            device = _resolve_device(cfg.get("device", "cuda"))
-            amp = cfg.get("amp", True) if device == "cuda" else False
+            # 0. Device
+            device = cfg.get("device", "cuda")
+            amp = cfg.get("amp", True)
 
             # 1. Data
             data = load_airfrans_data(task=cfg.get("task", "scarce"), seed=cfg.get("seed", 42))
