@@ -529,10 +529,15 @@ class NavierStokesPhysicsLoss(nn.Module):
         preds_phys: torch.Tensor,
         targs_phys: Optional[torch.Tensor],
         pos_phys: torch.Tensor,
-        Uref_local: float,
+        Uref_local,  # float or Tensor[N]
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]:
-        U = float(max(Uref_local, 1e-12))
         L = float(max(self.Lref, 1e-12))
+
+        # U can be scalar or [N,1] tensor for per-graph scaling in batches
+        if isinstance(Uref_local, torch.Tensor):
+            U = Uref_local.clamp(min=1e-12).unsqueeze(1)  # [N, 1]
+        else:
+            U = float(max(Uref_local, 1e-12))
 
         pos_scaled = pos_phys / L
 
@@ -548,13 +553,13 @@ class NavierStokesPhysicsLoss(nn.Module):
 
         targ_scaled = None
         if targs_phys is not None:
-            targ_scaled = targs_phys.clone()
-            if targ_scaled.size(1) >= 2:
-                targ_scaled[:, :2] = targ_scaled[:, :2] / U
-            if targ_scaled.size(1) >= 3:
-                targ_scaled[:, 2] = targ_scaled[:, 2] / (U ** 2)
-            if targ_scaled.size(1) >= 4:
-                targ_scaled[:, 3] = targ_scaled[:, 3] / (U * L)
+            # Use torch.cat to support tensor U broadcasting
+            targ_cols = [targs_phys[:, :2] / U]                          # u,v
+            if targs_phys.size(1) >= 3:
+                targ_cols.append(targs_phys[:, 2:3] / (U ** 2))          # p
+            if targs_phys.size(1) >= 4:
+                targ_cols.append(targs_phys[:, 3:4] / (U * L))           # nu_t
+            targ_scaled = torch.cat(targ_cols, dim=1)
 
         return pred_scaled, targ_scaled, pos_scaled
 
@@ -613,7 +618,7 @@ class NavierStokesPhysicsLoss(nn.Module):
         return float(q.clamp_min(1e-12))
 
     # ---------- continuity ----------
-    def _continuity_loss(self, u_scaled: torch.Tensor, data: Any, pos_scaled: torch.Tensor) -> torch.Tensor:
+    def _continuity_loss(self, u_scaled: torch.Tensor, data: Any, pos_phys: torch.Tensor) -> torch.Tensor:
         edge_index = data.edge_index.to(u_scaled.device)
         edge_attr = getattr(data, 'edge_attr_dxdy', getattr(data, 'edge_attr', None))
         if edge_attr is None:
@@ -625,7 +630,7 @@ class NavierStokesPhysicsLoss(nn.Module):
             edge_index=edge_index,
             edge_attr=edge_attr.to(u_scaled.device),
             num_nodes=u_scaled.size(0),
-            pos=pos_scaled,
+            pos=pos_phys,  # raw physical pos — Lref handles scaling internally
             prefer_dxdy=self.prefer_dxdy,
             node_area=node_area,
             use_perimeter_norm=self.use_perimeter_norm_for_div,
@@ -636,7 +641,7 @@ class NavierStokesPhysicsLoss(nn.Module):
         return self._quad_or_huber(div)
 
     # ---------- momentum ----------
-    def _momentum_loss(self, pred_scaled: torch.Tensor, data: Any, pos_scaled: torch.Tensor, mol_coeff: float) -> torch.Tensor:
+    def _momentum_loss(self, pred_scaled: torch.Tensor, data: Any, pos_phys: torch.Tensor, mol_coeff) -> torch.Tensor:
         edge_index = data.edge_index.to(pred_scaled.device)
         edge_attr = getattr(data, 'edge_attr_dxdy', getattr(data, 'edge_attr', None))
         if edge_attr is None:
@@ -653,11 +658,11 @@ class NavierStokesPhysicsLoss(nn.Module):
 
         # gradients
         dudx, dudy = weighted_gradient(u, edge_index, edge_attr.to(device), num_nodes,
-                                       pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
+                                       pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
         dvdx, dvdy = weighted_gradient(v, edge_index, edge_attr.to(device), num_nodes,
-                                       pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
+                                       pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
         dpdx, dpdy = weighted_gradient(p, edge_index, edge_attr.to(device), num_nodes,
-                                       pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
+                                       pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
 
         # convective terms
         if self.use_skew:
@@ -669,13 +674,13 @@ class NavierStokesPhysicsLoss(nn.Module):
             v2 = v * v
             uv = u * v
             du2dx, _ = weighted_gradient(u2, edge_index, edge_attr.to(device), num_nodes,
-                                         pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
+                                         pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
             _, duvdy = weighted_gradient(uv, edge_index, edge_attr.to(device), num_nodes,
-                                         pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
+                                         pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
             duvdx, _ = weighted_gradient(uv, edge_index, edge_attr.to(device), num_nodes,
-                                         pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
+                                         pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
             _, dv2dy = weighted_gradient(v2, edge_index, edge_attr.to(device), num_nodes,
-                                         pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
+                                         pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
             conv_u = 0.5 * (conv_u_std + (du2dx + duvdy))
             conv_v = 0.5 * (conv_v_std + (duvdx + dv2dy))
         else:
@@ -684,11 +689,11 @@ class NavierStokesPhysicsLoss(nn.Module):
 
         # viscous: ∇·[(1/Re + nu_t) ∇u] = (mol_coeff + nu_t) Δu + ∇nu_t · ∇u
         lap_u = weighted_laplacian(u, edge_index, edge_attr.to(device), num_nodes,
-                                   pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
+                                   pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
         lap_v = weighted_laplacian(v, edge_index, edge_attr.to(device), num_nodes,
-                                   pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
+                                   pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
         dnutdx, dnutdy = weighted_gradient(nu_t, edge_index, edge_attr.to(device), num_nodes,
-                                           pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
+                                           pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
 
         visc_u = (mol_coeff + nu_t) * lap_u + dnutdx * dudx + dnutdy * dudy
         visc_v = (mol_coeff + nu_t) * lap_v + dnutdx * dvdx + dnutdy * dvdy
@@ -704,7 +709,7 @@ class NavierStokesPhysicsLoss(nn.Module):
         self,
         x_phys: Optional[torch.Tensor],
         mask: torch.Tensor,
-        U_ref: float,
+        U_ref,  # float or Tensor[N]
         device: torch.device,
         dtype: torch.dtype,
     ) -> torch.Tensor:
@@ -717,6 +722,9 @@ class NavierStokesPhysicsLoss(nn.Module):
         if x_phys is not None and x_phys.size(1) >= 2:
             # x_phys[:, 0:2] = physical freestream velocity per node
             u_inf = x_phys[mask, :2].to(device=device, dtype=dtype)  # [n, 2]
+            if isinstance(U_ref, torch.Tensor):
+                u_ref_masked = U_ref[mask].unsqueeze(1).clamp(min=1e-12)  # [n, 1]
+                return u_inf / u_ref_masked
             return u_inf / max(U_ref, 1e-12)
         # Fallback: assume unit velocity in x-direction (AoA=0)
         return torch.tensor([[1.0, 0.0]], device=device, dtype=dtype).expand(n, -1)
@@ -725,7 +733,7 @@ class NavierStokesPhysicsLoss(nn.Module):
         self,
         pred_scaled: torch.Tensor,
         data: Any,
-        Uref_local: Optional[float] = None,
+        Uref_local=None,  # float, Tensor[N], or None
         x_phys: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         """
@@ -740,8 +748,13 @@ class NavierStokesPhysicsLoss(nn.Module):
         N = pred_scaled.size(0)
         u = pred_scaled[:, :2]
         p = pred_scaled[:, 2] if pred_scaled.size(1) >= 3 else torch.zeros(N, device=device)
-        U_ref = float(self.Uref) if Uref_local is None else float(Uref_local)
-        U_ref = max(U_ref, 1e-12)
+        # U_ref: keep as tensor if per-node, else scalar
+        if Uref_local is None:
+            U_ref = float(self.Uref)
+        elif isinstance(Uref_local, torch.Tensor):
+            U_ref = Uref_local.clamp(min=1e-12)  # [N] tensor
+        else:
+            U_ref = max(float(Uref_local), 1e-12)
 
         zero = torch.zeros((), device=device, dtype=pred_scaled.dtype)
         bc_terms: Dict[str, torch.Tensor] = {
@@ -769,6 +782,10 @@ class NavierStokesPhysicsLoss(nn.Module):
                     }
                 u_wall = u[mask_w]
                 wall_loss = (u_wall ** 2).mean()
+                # nu_t = 0 at wall (turbulence models require vanishing eddy viscosity)
+                if pred_scaled.size(1) >= 4:
+                    nut_wall = pred_scaled[mask_w, 3]
+                    wall_loss = wall_loss + (nut_wall ** 2).mean()
                 bc_terms["bc_wall_loss"] = wall_loss
                 bc_loss_terms.append(wall_loss)
 
@@ -788,17 +805,22 @@ class NavierStokesPhysicsLoss(nn.Module):
                     }
                 u_inlet = u[mask_in]
                 n_inlet = mask_in.sum().item()
+                # Per-mask U_ref divisor: [n_inlet, 1] tensor or scalar
+                if isinstance(U_ref, torch.Tensor):
+                    U_ref_in = U_ref[mask_in].unsqueeze(1)  # [n_inlet, 1]
+                else:
+                    U_ref_in = U_ref
                 inlet_u = getattr(data, 'inlet_u', None)
                 if inlet_u is not None:
                     inlet_u = inlet_u.to(device)
                     # Shape dispatch for various upstream formats
                     # inlet_u is in physical units → divide by U_ref for scaled target
                     if inlet_u.shape[0] == n_inlet and inlet_u.dim() == 2:
-                        inlet_u_target = inlet_u / U_ref
+                        inlet_u_target = inlet_u / U_ref_in
                     elif inlet_u.shape[0] == N and inlet_u.dim() == 2:
-                        inlet_u_target = inlet_u[mask_in] / U_ref
+                        inlet_u_target = inlet_u[mask_in] / U_ref_in
                     elif inlet_u.dim() == 1 and inlet_u.shape[0] == 2:
-                        inlet_u_target = inlet_u.unsqueeze(0).expand(n_inlet, -1) / U_ref
+                        inlet_u_target = inlet_u.unsqueeze(0).expand(n_inlet, -1) / U_ref_in
                     else:
                         import warnings
                         warnings.warn(
@@ -904,14 +926,15 @@ class NavierStokesPhysicsLoss(nn.Module):
         # x_phys for U∞ inference (denormalized)
         x_phys = self._get_x_phys(data, device)
 
-        # 3) Dynamic U_ref (U∞) and scaling
+        # 3) Dynamic U_ref (U∞) and scaling — per-node for correct batched physics
+        # In AirfRANS, x_phys[:, 0:2] is the freestream velocity feature (constant
+        # per graph), so per-node norm naturally gives per-graph U_ref in batches.
         Uref_local = self.Uref
         if self.dynamic_uref_from_data and x_phys is not None and x_phys.size(1) >= 2:
             try:
-                Uref_local = self._infer_Uinf(data, x_phys)
-                Uref_local = max(min(Uref_local, 1e3), 0.05)  # clamp for robustness
+                Uref_local = x_phys[:, :2].norm(dim=1).clamp(min=0.05, max=1e3)  # [N] tensor
             except Exception:
-                Uref_local = self.Uref  # fallback
+                Uref_local = self.Uref  # fallback to scalar
 
         pred_scaled, targ_scaled, pos_scaled = self._apply_dimensional_scaling_with_Uref(
             preds_phys, targs_phys, pos_phys, Uref_local
@@ -919,7 +942,10 @@ class NavierStokesPhysicsLoss(nn.Module):
 
         # 4) Dynamic 1/Re coefficient for molecular viscosity
         if self.dynamic_re_from_data:
-            mol_coeff = self.nu_molecular / (max(Uref_local, 1e-12) * max(self.Lref, 1e-12))
+            if isinstance(Uref_local, torch.Tensor):
+                mol_coeff = self.nu_molecular / (Uref_local.clamp(min=1e-12) * max(self.Lref, 1e-12))  # [N]
+            else:
+                mol_coeff = self.nu_molecular / (max(Uref_local, 1e-12) * max(self.Lref, 1e-12))
         else:
             mol_coeff = 1.0 / max(self.Re, 1e-12)
 
@@ -930,11 +956,11 @@ class NavierStokesPhysicsLoss(nn.Module):
 
         if data is not None:
             try:
-                cont_loss = self._continuity_loss(pred_scaled, data, pos_scaled)
+                cont_loss = self._continuity_loss(pred_scaled, data, pos_phys)
             except Exception as e:
                 print(f"[physics] continuity skipped: {e}")
             try:
-                mom_loss = self._momentum_loss(pred_scaled, data, pos_scaled, mol_coeff)
+                mom_loss = self._momentum_loss(pred_scaled, data, pos_phys, mol_coeff)
             except Exception as e:
                 print(f"[physics] momentum skipped: {e}")
             try:
@@ -991,8 +1017,14 @@ class NavierStokesPhysicsLoss(nn.Module):
         losses["mom_ramp"]  = torch.as_tensor(r_mom, device=predictions.device)
 
         # for logging convenience
-        losses["uref_used"] = torch.tensor(float(Uref_local), device=device)
-        losses["mol_coeff"] = torch.tensor(float(mol_coeff), device=device)
+        if isinstance(Uref_local, torch.Tensor):
+            losses["uref_used"] = Uref_local.mean().detach()
+        else:
+            losses["uref_used"] = torch.tensor(float(Uref_local), device=device)
+        if isinstance(mol_coeff, torch.Tensor):
+            losses["mol_coeff"] = mol_coeff.mean().detach()
+        else:
+            losses["mol_coeff"] = torch.tensor(float(mol_coeff), device=device)
 
         # 7) DEBUG: 수치/스케일 이상 탐지 및 통계 수집 (학습엔 영향 없음)
         want_debug = self.debug and (step is None or (step % self.debug_every == 0))
@@ -1044,8 +1076,8 @@ class NavierStokesPhysicsLoss(nn.Module):
                     dbg['lap_u*'] = self._stat1d(lap_u)
                     dbg['lap_v*'] = self._stat1d(lap_v)
                 # 스케일/유닛 체크
-                dbg['uref_used'] = float(Uref_local)
-                dbg['mol_coeff'] = float(mol_coeff)
+                dbg['uref_used'] = float(Uref_local.mean()) if isinstance(Uref_local, torch.Tensor) else float(Uref_local)
+                dbg['mol_coeff'] = float(mol_coeff.mean()) if isinstance(mol_coeff, torch.Tensor) else float(mol_coeff)
                 # 마스크 개수
                 for k in ['is_wall','is_inlet','is_outlet','is_farfield']:
                     v = getattr(data, k, None)

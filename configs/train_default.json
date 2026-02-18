@@ -39,7 +39,7 @@
   "continuity_target_weight": 0.00,
   "momentum_loss_weight": 0.00,
   "momentum_target_weight": 0.01,
-  "bc_loss_weight": 0.00,
+  "bc_loss_weight": 0.01,
   "chord_length": 1.0,
   "nu_molecular": 1.5e-05,
   "dynamic_uref_from_data": true,

@@ -16,7 +16,7 @@ from torch_geometric.data import Data, Batch
 from torch_geometric.transforms import BaseTransform
 
 from .config import SmokeCfg
-from .preprocessing import prepare_airfrans_graph_for_physics, build_bc_masks_airfrans
+from .preprocessing import prepare_airfrans_graph_for_physics, build_bc_masks_airfrans, estimate_node_area
 from .utils import prep_graph, validate_edges, _prep_graph_for_norm
 
 
@@ -90,7 +90,7 @@ class NormalizedDataset(torch.utils.data.Dataset):
                 dm.edge_attr_dxdy = d.edge_attr[:, -2:]
             dm.edge_attr = d.edge_attr
 
-        # Build BC masks from RAW (unnormalized) features
+        # Build BC masks and node_area from RAW (unnormalized) features
         d_raw = d.clone()
         if hasattr(dm, 'edge_index'):
             d_raw.edge_index = dm.edge_index
@@ -99,8 +99,9 @@ class NormalizedDataset(torch.utils.data.Dataset):
         elif hasattr(dm, 'edge_attr'):
             d_raw.edge_attr = dm.edge_attr
         d_raw = build_bc_masks_airfrans(d_raw)
+        d_raw = estimate_node_area(d_raw)
 
-        for attr in ['is_wall', 'is_inlet', 'is_outlet', 'is_farfield', 'inlet_u', 'wall_normal']:
+        for attr in ['is_wall', 'is_inlet', 'is_outlet', 'is_farfield', 'inlet_u', 'wall_normal', 'node_area']:
             if hasattr(d_raw, attr):
                 setattr(dm, attr, getattr(d_raw, attr))
 
