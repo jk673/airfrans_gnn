@@ -104,13 +104,46 @@ Physics weights ramp up over training via linear or cosine curriculum schedule. 
 | `docs/benchmark/benchmark_reference.json` | FLOW-GLIDE 논문의 10개 baseline 메트릭 |
 | `scripts/score_benchmark.py` | CLI 벤치마크 스코어링 (6개 메트릭 계산 + 비교 테이블) |
 
-### Edge Attribute Schema
+### Edge Feature Pipeline
 
-Base 5D edge features: `[dist, dir_x, dir_y, cos_n, is_surface_pair]`. Two raw orderings are auto-detected:
-- `[dist, dir_x, dir_y]` (default) or `[dx, dy, dist]` (dxdy format)
-- Detection heuristic in `src/edge_construction.py` based on column value ranges
+엣지 피처는 오프라인 전처리 → 로드 타임 enrichment 두 단계로 생성된다.
 
-After `_prep_graph_for_norm`, `enrich_edge_features()` in `src/data.py` extends 5D → 10D by appending: `log_dist, edge_angle, relative_sdf, min_sdf, has_boundary_node`.
+**Stage 1 — 오프라인 전처리** (`src/edge_construction.py:build_edges_for_graph`)
+
+`prebuilt_edges_v2/`에 저장. 두 가지 텐서를 저장:
+
+| 텐서 | 차원 | 피처 구성 |
+|------|------|-----------|
+| `edge_attr` | 5D | `[dist, dir_x, dir_y, cos_n, is_surface_pair]` |
+| `edge_attr_dxdy` | 3D | `[dx, dy, dist]` (물리 손실 전용) |
+
+`cos_n`: 양 끝 노드의 법선벡터 코사인 유사도 (`x[:, 3:5]` 사용).
+`is_surface_pair`: 양 끝 모두 표면 노드면 1.
+
+**Stage 2 — 로드 타임 enrichment** (`src/data.py:load_and_prepare_data`)
+
+```
+prep_graph() → _prep_graph_for_norm() → enrich_edge_features()
+```
+
+- `_prep_graph_for_norm`: 노드 x 5D → 7D (pos[:,:2] append)
+- `enrich_edge_features`: edge_attr **5D → 10D** (edge_attr.size(1)==5 일 때만 실행)
+
+추가되는 5개 피처:
+
+| 인덱스 | 이름 | 계산 |
+|--------|------|------|
+| 5 | `log_dist` | `log(dist + 1e-8)` |
+| 6 | `edge_angle` | `atan2(dy, dx) / π` ∈ [-1, 1] |
+| 7 | `relative_sdf` | `(sdf[col] - sdf[row]) / (dist + 1e-8)` |
+| 8 | `min_sdf` | `min(sdf[row], sdf[col])` |
+| 9 | `has_boundary_node` | 양 끝 중 하나라도 표면 노드면 1 |
+
+`sdf = x[:, 2]` (wall distance).
+
+**최종 모델 입력**: 노드 7D (normalized) + 엣지 10D (raw) + `edge_attr_dxdy` 3D (physics loss)
+
+상세 문서: `docs/preprocessing/edge_feature_pipeline.md`
 
 ### Batching
 

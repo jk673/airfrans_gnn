@@ -14,8 +14,7 @@ from typing import Any
 import numpy as np
 from torch.utils.data import DataLoader
 
-from src.data import DataBundle, NormalizedDataset, collate_pyg, enrich_edge_features
-from src.utils import _prep_graph_for_norm
+from src.data import DataBundle, NormalizedDataset, collate_pyg, enrich_edge_features, _prep_graph_for_norm
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -471,7 +470,11 @@ def run_benchmark_and_log_experiment(
         print(f"[experiment log] Benchmark scoring failed: {exc}")
         benchmark_metrics = {}
 
-    run_config = asdict(scfg)
+    # Support both dataclass (SmokeCfg) and plain dict configs
+    if isinstance(scfg, dict):
+        run_config = scfg
+    else:
+        run_config = asdict(scfg)
     train_metrics = {
         "status": "completed",
         "best_val_loss": train_summary.get("best_val", float("nan")),
@@ -481,10 +484,13 @@ def run_benchmark_and_log_experiment(
         "artifacts_uploaded": train_summary.get("artifacts_uploaded", 0),
     }
 
+    def _cfg_get(obj, key, default=None):
+        return obj.get(key, default) if isinstance(obj, dict) else getattr(obj, key, default)
+
     model_name = (
-        getattr(scfg, "wandb_name", None)
-        or getattr(scfg, "wandb_run_name", None)
-        or f"{scfg.task}-h{scfg.hidden}-l{scfg.layers}"
+        _cfg_get(scfg, "wandb_name")
+        or _cfg_get(scfg, "wandb_run_name")
+        or f"{_cfg_get(scfg, 'task', 'unknown')}-h{_cfg_get(scfg, 'hidden', '?')}-l{_cfg_get(scfg, 'layers', '?')}"
     )
 
     try:

@@ -12,19 +12,29 @@
 
 from __future__ import annotations
 import math
-from typing import Dict, Optional, Any, Tuple
+from typing import Dict, Optional, Any, Tuple, overload
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_add
-from src.utils import _valid_edges
+from src.data import _valid_edges
 
 
 
 
 
-def _half_edges(edge_index: torch.Tensor, edge_attr: Optional[torch.Tensor] = None):
+@overload
+def _half_edges(edge_index: torch.Tensor, edge_attr: None = None) -> Tuple[torch.Tensor, None]:
+    ...
+
+
+@overload
+def _half_edges(edge_index: torch.Tensor, edge_attr: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    ...
+
+
+def _half_edges(edge_index: torch.Tensor, edge_attr: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
     """Keep one direction per undirected pair using row<col mask."""
     row, col = edge_index
     mask = row < col
@@ -1512,13 +1522,16 @@ class UnifiedNavierStokesPhysicsLoss(nn.Module):
         if self.pressure_mode == "grad" or (self.pressure_mode == "auto" and not _area_looks_ok()):
             pressure_term = p_grad
         elif self.pressure_mode == "fv":
-            pressure_term = p_fv
+            pressure_term = p_fv if p_fv is not None else p_grad
         else:
-            ell_loc = self._node_length_scale(edge_index, edge_attr, num_nodes)
-            ref_acc = (self.U_ref * self.U_ref) / ell_loc.clamp_min(1e-8)
-            rms_grad = (p_grad / ref_acc.unsqueeze(-1)).norm(dim=1).mean()
-            rms_fv   = (p_fv   / ref_acc.unsqueeze(-1)).norm(dim=1).mean()
-            pressure_term = p_fv if (rms_fv >= 0.1 * rms_grad) else p_grad
+            if p_fv is None:
+                pressure_term = p_grad
+            else:
+                ell_loc = self._node_length_scale(edge_index, edge_attr, num_nodes)
+                ref_acc = (self.U_ref * self.U_ref) / ell_loc.clamp_min(1e-8)
+                rms_grad = (p_grad / ref_acc.unsqueeze(-1)).norm(dim=1).mean()
+                rms_fv   = (p_fv   / ref_acc.unsqueeze(-1)).norm(dim=1).mean()
+                pressure_term = p_fv if (rms_fv >= 0.1 * rms_grad) else p_grad
 
         # 3. Viscous term: variable-coefficient diffusion
         if nu_eff is not None:
