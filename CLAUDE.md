@@ -15,35 +15,10 @@ uv sync   # uses pyproject.toml with PyTorch CUDA 12.4 index and prebuilt PyG wh
 
 Key dependencies: PyTorch, PyTorch Geometric, torch-scatter, torch-sparse, wandb, scipy.
 
-## PyTorch 문서 참조 규칙 (Context7)
+## 문서 참조 규칙 (Context7)
 
-- PyTorch 관련 질문(API 사용법, 설치, 설정, 예제 코드, 버전별 차이, deprecated 여부 등)에는 **항상 Context7 MCP를 사용**한다.
-- 기본은 **PyTorch 최신 stable 문서** 기준으로 답변한다.
-- Context7 library ID는 `/pytorch/pytorch`로 고정하여 사용한다.
-- 버전이 명시된 경우(예: PyTorch 2.1, 2.2, 2.5)에는 해당 버전 문서를 우선 참조한다.
-- PyTorch 관련 코드 생성, 디버깅, 성능 최적화 질문에도 동일하게 적용한다.
-
-**프롬프트 예시:**
-```python
-# torch.nn.functional.grid_sample의 align_corners 파라미터가 무엇인지 설명해줘
-# PyTorch 2.5에서 torch.compile 사용 예제를 보여줘
-# DataLoader의 num_workers 설정 시 권장사항은?
-```
-
-## PyTorch Geometric 문서 참조 규칙 (Context7)
-
-- PyTorch Geometric 관련 질문(GNN 레이어, 데이터 구조, 메시지 패싱, 배치 처리, 변환 등)에는 **항상 Context7 MCP를 사용**한다.
-- Context7 library ID는 `/pyg-team/pytorch_geometric`로 고정하여 사용한다.
-- PyG의 `Data`, `Batch`, `MessagePassing`, 각종 Conv 레이어(GCNConv, GATConv 등) 사용법 질문에 적용한다.
-- 그래프 전처리, 에지 구성, 노드/에지 피처 처리 관련 질문에도 동일하게 적용한다.
-
-**프롬프트 예시:**
-```python
-# MessagePassing 클래스의 propagate 메서드는 어떻게 동작하나?
-# torch_geometric.nn.GATConv의 heads 파라미터 설명
-# Batch.from_data_list()로 여러 그래프 배치 처리하는 방법
-# radius_graph와 knn_graph의 차이점은?
-```
+- **PyTorch**: Context7 library ID `/pytorch/pytorch` 사용. 버전 명시 시 해당 버전 문서 우선.
+- **PyTorch Geometric**: Context7 library ID `/pyg-team/pytorch_geometric` 사용.
 
 ## Commands
 
@@ -51,10 +26,10 @@ Key dependencies: PyTorch, PyTorch Geometric, torch-scatter, torch-sparse, wandb
 
 ```bash
 # Step 1: Downsample raw AirfRANS graphs (100k+ nodes → 15-30k)
-python preprocessing/downsample_airfrans.py --root Dataset --task scarce --out-dir downsampled_graphs
+python preprocessing/downsample_airfrans_v2.py --root Dataset --task scarce --out-dir downsampled_graphs_v2
 
 # Step 2: Build multi-scale radius-graph edges
-python preprocessing/build_edges_from_downsampled.py --in-dir downsampled_graphs --out-dir prebuilt_edges_v2 --task scarce
+python preprocessing/edges_from_downsampled_v2.py --in-dir downsampled_graphs_v2 --out-dir prebuilt_edges_v2 --task scarce
 ```
 
 ### Training
@@ -64,28 +39,32 @@ CLI scripts (preferred):
 - `scripts/run_experiment.py` — Train + benchmark score + experiment logging
 - `scripts/train_multiscale.py` — Multi-scale model variant
 - `scripts/optuna_hpo.py` — Hyperparameter optimization with Optuna
+- `scripts/eval_cp.py` — Evaluate Cp relative L2 from a checkpoint
+- `scripts/reset_experiment_docs.py` — Reset experiment tracking and Optuna docs
 
 Jupyter notebooks (interactive exploration):
+- `notebooks/00_preprocessing.ipynb` — Data preprocessing and inspection
 - `notebooks/01_trainer.ipynb` — Main training pipeline
 - `notebooks/02_optuna_training.ipynb` — Hyperparameter optimization with Optuna
 - `notebooks/02_trainer_multi_scale.ipynb` — Multi-scale model variant
+- `notebooks/03_eval_cp_relative_l2.ipynb` — Surface pressure evaluation
 
 ### Tests
 
 ```bash
 pytest tests/ -v
-pytest tests/test_continuity_loss.py::test_continuity_zero_divergence_gt_only -v  # single test
+pytest tests/test_physics_loss_batching.py::test_physics_loss_with_increased_batch_size -v  # single test
 ```
 
 ## Architecture
 
 ### Pipeline Flow
 
-Raw AirfRANS data → `preprocessing/downsample_airfrans.py` (adaptive voxel sampling, preserves surface nodes) → `preprocessing/build_edges_from_downsampled.py` (radius-graph edges with KNN backup) → Training via `scripts/train.py` or notebooks (normalize with `src/data.py`, train with `src/training.py` + physics loss, evaluate)
+Raw AirfRANS data → `preprocessing/downsample_airfrans_v2.py` (adaptive voxel sampling, preserves surface nodes) → `preprocessing/edges_from_downsampled_v2.py` (radius-graph edges with KNN backup) → Training via `scripts/train.py` or notebooks (normalize with `src/data.py`, train with `src/training.py` + physics loss, evaluate)
 
 ### Model: `EnhancedCFDModelWithGlobalContext` (defined in `src/global_context_processor.py`)
 
-- **Input**: 7D node features (freestream velocity, wall distance, wall normals, position) + 5D edge features
+- **Input**: 7D node features (freestream velocity, wall distance, wall normals, position) + 10D edge features (after enrichment)
 - **Output**: 4D predictions (u, v, pressure, nu_t)
 - **Architecture**: Node/Edge encoders → 14 message-passing layers → optional `GlobalContextProcessor` (attention-based) → output decoder
 - Configuration lives in `SmokeCfg` dataclass in `src/config.py`
@@ -120,17 +99,18 @@ Physics weights ramp up over training via linear or cosine curriculum schedule. 
 | `src/prediction.py` | Model inference helpers |
 | `src/visualization.py` | Prediction vs. ground-truth plotting |
 | `src/edge_construction.py` | Radius-graph edge building, degree floor enforcement, edge features, QA reports |
-| `preprocessing/build_edges_from_downsampled.py` | Edge construction wrapper (CLI) |
+| `src/ddp_utils.py` | Distributed Data Parallel helpers (`setup_ddp`, `_is_ddp`, `_unwrap_model`, etc.) |
+| `preprocessing/edges_from_downsampled_v2.py` | Edge construction wrapper (CLI) |
 | `docs/benchmark/benchmark_reference.json` | FLOW-GLIDE 논문의 10개 baseline 메트릭 |
 | `scripts/score_benchmark.py` | CLI 벤치마크 스코어링 (6개 메트릭 계산 + 비교 테이블) |
 
 ### Edge Attribute Schema
 
-The codebase supports two edge feature orderings detected automatically:
-- `[dist, dir_x, dir_y]` (default)
-- `[dx, dy, dist]` (dxdy format)
+Base 5D edge features: `[dist, dir_x, dir_y, cos_n, is_surface_pair]`. Two raw orderings are auto-detected:
+- `[dist, dir_x, dir_y]` (default) or `[dx, dy, dist]` (dxdy format)
+- Detection heuristic in `src/edge_construction.py` based on column value ranges
 
-Detection heuristic is in `src/edge_construction.py` based on column value ranges.
+After `_prep_graph_for_norm`, `enrich_edge_features()` in `src/data.py` extends 5D → 10D by appending: `log_dist, edge_angle, relative_sdf, min_sdf, has_boundary_node`.
 
 ### Batching
 
@@ -139,7 +119,7 @@ Uses PyG `Batch.from_data_list()` — multiple variable-size graphs concatenated
 ## Data Artifacts
 
 - `Dataset/` — Raw AirfRANS dataset
-- `downsampled_graphs/<task>/{train,test}/graph_*.pt` — Downsampled graphs
+- `downsampled_graphs_v2/<task>/{train,test}/graph_*.pt` — Downsampled graphs
 - `prebuilt_edges_v2/<task>/{train,test}/graph_*.pt` — Graphs with precomputed edges
 
 Prebuilt graphs are aligned to the original dataset via `orig_index` field.
@@ -177,7 +157,7 @@ python scripts/score_benchmark.py \
 | ρ_D (Spearman) | Rank correlation of drag coefficient | ↑ |
 | ρ_L (Spearman) | Rank correlation of lift coefficient | ↑ |
 
-### 출력 파일
+### 출력 파일 (score_benchmark.py 실행 시 생성)
 
 - `docs/benchmark/results.json` — 메트릭 값 + 메타데이터
 - `docs/benchmark/results.md` — FLOW-GLIDE 비교 마크다운 테이블

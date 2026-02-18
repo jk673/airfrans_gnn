@@ -531,7 +531,10 @@ def _save_loss_signal_plots(loss_history: dict) -> None:
                     linewidth=1.2,
                 )
             ax.set_ylabel("Loss")
-            ax.set_ylim(0, 1)
+            if key in {"continuity_loss", "bc_loss"}:
+                ax.set_ylim(0.0, 0.1)
+            else:
+                ax.set_ylim(0, 1)
         ax.set_title(LOSS_SIGNAL_LABELS.get(key, key))
         ax.set_xlabel("Epoch")
         ax.grid(True, alpha=0.25)

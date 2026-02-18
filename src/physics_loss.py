@@ -14,7 +14,6 @@ from __future__ import annotations
 import math
 from typing import Dict, Optional, Any, Tuple
 
-from matplotlib.pyplot import step
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -537,13 +536,15 @@ class NavierStokesPhysicsLoss(nn.Module):
 
         pos_scaled = pos_phys / L
 
-        pred_scaled = preds_phys.clone()
-        if pred_scaled.size(1) >= 2:
-            pred_scaled[:, :2] = pred_scaled[:, :2] / U
-        if pred_scaled.size(1) >= 3:
-            pred_scaled[:, 2] = pred_scaled[:, 2] / (U ** 2)
-        if pred_scaled.size(1) >= 4:
-            pred_scaled[:, 3] = pred_scaled[:, 3] / (U * L)
+        # Build pred_scaled without inplace ops (softplus + inplace breaks autograd)
+        pred_cols = [preds_phys[:, :2] / U]                          # u,v
+        if preds_phys.size(1) >= 3:
+            pred_cols.append(preds_phys[:, 2:3] / (U ** 2))          # p
+        if preds_phys.size(1) >= 4:
+            # softplus in physical space BEFORE scaling to ensure positivity
+            # (applying after scaling inflates ~0 values to ln(2) ≈ 0.693)
+            pred_cols.append(F.softplus(preds_phys[:, 3:4]) / (U * L))  # nu_t
+        pred_scaled = torch.cat(pred_cols, dim=1)
 
         targ_scaled = None
         if targs_phys is not None:
@@ -648,8 +649,7 @@ class NavierStokesPhysicsLoss(nn.Module):
         v = pred_scaled[:, 1]
         p = pred_scaled[:, 2] if pred_scaled.size(1) >= 3 else torch.zeros_like(u)
         nu_t = pred_scaled[:, 3] if pred_scaled.size(1) >= 4 else torch.zeros_like(u)
-        # ensure non-negativity
-        nu_t = F.softplus(nu_t)
+        # positivity already ensured via softplus in _apply_dimensional_scaling_with_Uref
 
         # gradients
         dudx, dudy = weighted_gradient(u, edge_index, edge_attr.to(device), num_nodes,
@@ -700,17 +700,39 @@ class NavierStokesPhysicsLoss(nn.Module):
         return self._quad_or_huber(torch.stack([res_u, res_v], dim=-1))
 
     # ---------- boundary conditions (optional) ----------
+    def _get_freestream_scaled(
+        self,
+        x_phys: Optional[torch.Tensor],
+        mask: torch.Tensor,
+        U_ref: float,
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> torch.Tensor:
+        """Return freestream velocity target in scaled space [n_masked, 2].
+
+        Uses actual freestream from x_phys[:, 0:2] (physical, per-node) when
+        available; otherwise falls back to [1, 0] (unit x-direction).
+        """
+        n = int(mask.sum().item())
+        if x_phys is not None and x_phys.size(1) >= 2:
+            # x_phys[:, 0:2] = physical freestream velocity per node
+            u_inf = x_phys[mask, :2].to(device=device, dtype=dtype)  # [n, 2]
+            return u_inf / max(U_ref, 1e-12)
+        # Fallback: assume unit velocity in x-direction (AoA=0)
+        return torch.tensor([[1.0, 0.0]], device=device, dtype=dtype).expand(n, -1)
+
     def _bc_loss(
         self,
         pred_scaled: torch.Tensor,
         data: Any,
-        Uref_local: Optional[float] = None
+        Uref_local: Optional[float] = None,
+        x_phys: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         """
         Soft BC penalties if masks exist in data:
         - is_wall: no-slip u=0
         - is_inlet & inlet_u (opt): u=profile
-        - is_farfield: u ~ U_inf(=1 in scaled), p~0
+        - is_farfield: u ~ U_inf/U_ref, p~0
         - is_outlet: p~0
         All masks are expected as [N] bool or 0/1 tensors.
         """
@@ -720,7 +742,6 @@ class NavierStokesPhysicsLoss(nn.Module):
         p = pred_scaled[:, 2] if pred_scaled.size(1) >= 3 else torch.zeros(N, device=device)
         U_ref = float(self.Uref) if Uref_local is None else float(Uref_local)
         U_ref = max(U_ref, 1e-12)
-        scale_u = torch.as_tensor(U_ref, device=device, dtype=pred_scaled.dtype)
 
         zero = torch.zeros((), device=device, dtype=pred_scaled.dtype)
         bc_terms: Dict[str, torch.Tensor] = {
@@ -751,7 +772,7 @@ class NavierStokesPhysicsLoss(nn.Module):
                 bc_terms["bc_wall_loss"] = wall_loss
                 bc_loss_terms.append(wall_loss)
 
-        # inlet: velocity match (if inlet_u provided); else weak penalty to freestream (1,0)
+        # inlet: velocity match (if inlet_u provided); else use freestream from x_phys
         is_inlet = getattr(data, 'is_inlet', None)
         if is_inlet is not None:
             mask_in = is_inlet.bool().to(device)
@@ -771,32 +792,33 @@ class NavierStokesPhysicsLoss(nn.Module):
                 if inlet_u is not None:
                     inlet_u = inlet_u.to(device)
                     # Shape dispatch for various upstream formats
+                    # inlet_u is in physical units → divide by U_ref for scaled target
                     if inlet_u.shape[0] == n_inlet and inlet_u.dim() == 2:
-                        # Already correctly sized [n_inlet, 2]
-                        inlet_u_target = inlet_u / scale_u
+                        inlet_u_target = inlet_u / U_ref
                     elif inlet_u.shape[0] == N and inlet_u.dim() == 2:
-                        # Full-graph size [N, 2] → filter by mask
-                        inlet_u_target = inlet_u[mask_in] / scale_u
+                        inlet_u_target = inlet_u[mask_in] / U_ref
                     elif inlet_u.dim() == 1 and inlet_u.shape[0] == 2:
-                        # Per-graph single vector [2] → broadcast
-                        inlet_u_target = inlet_u.unsqueeze(0).expand(n_inlet, -1) / scale_u
+                        inlet_u_target = inlet_u.unsqueeze(0).expand(n_inlet, -1) / U_ref
                     else:
                         import warnings
                         warnings.warn(
                             f"inlet_u shape {tuple(inlet_u.shape)} unexpected for "
-                            f"n_inlet={n_inlet}, N={N}; using (1,0) fallback"
+                            f"n_inlet={n_inlet}, N={N}; using x_phys freestream fallback"
                         )
-                        inlet_u_target = torch.tensor([[1.0, 0.0]], device=device, dtype=u_inlet.dtype).expand(n_inlet, -1) / scale_u
+                        inlet_u_target = self._get_freestream_scaled(
+                            x_phys, mask_in, U_ref, device, u_inlet.dtype)
                     inlet_loss = ((u_inlet - inlet_u_target) ** 2).mean()
                     bc_terms["bc_inlet_loss"] = inlet_loss
                     bc_loss_terms.append(inlet_loss)
                 else:
-                    target = torch.tensor([[1.0, 0.0]], device=device, dtype=u_inlet.dtype).expand_as(u_inlet) / scale_u
+                    # No inlet_u: use actual freestream from x_phys
+                    target = self._get_freestream_scaled(
+                        x_phys, mask_in, U_ref, device, u_inlet.dtype)
                     inlet_loss = 0.1 * ((u_inlet - target) ** 2).mean()
                     bc_terms["bc_inlet_loss"] = inlet_loss
                     bc_loss_terms.append(inlet_loss)
 
-        # farfield: u≈U_inf and p≈0 (weak)
+        # farfield: u ≈ U_inf/U_ref and p ≈ 0 (weak)
         is_far = getattr(data, 'is_farfield', None)
         if is_far is not None:
             mask_f = is_far.bool().to(device)
@@ -812,7 +834,9 @@ class NavierStokesPhysicsLoss(nn.Module):
                     }
                 u_far = u[mask_f]
                 p_far = p[mask_f]
-                target_u = torch.tensor([[1.0, 0.0]], device=device, dtype=u_far.dtype).expand_as(u_far) / scale_u
+                # Use actual freestream velocity from x_phys (handles AoA correctly)
+                target_u = self._get_freestream_scaled(
+                    x_phys, mask_f, U_ref, device, u_far.dtype)
                 farfield_loss = 0.1 * ((u_far - target_u) ** 2).mean() + 0.1 * (p_far ** 2).mean()
                 bc_terms["bc_farfield_loss"] = farfield_loss
                 bc_loss_terms.append(farfield_loss)
@@ -915,7 +939,7 @@ class NavierStokesPhysicsLoss(nn.Module):
                 print(f"[physics] momentum skipped: {e}")
             try:
                 if self.bc_w > 0.0:
-                    bc_info = self._bc_loss(pred_scaled, data, Uref_local)
+                    bc_info = self._bc_loss(pred_scaled, data, Uref_local, x_phys=x_phys)
                     if isinstance(bc_info, dict):
                         bc_loss = bc_info.get("bc_loss", torch.zeros((), device=device))
                         losses["bc_loss"] = bc_loss
@@ -983,7 +1007,7 @@ class NavierStokesPhysicsLoss(nn.Module):
                 if pred_scaled.size(1) >= 3:
                     dbg['p_tilde'] = self._stat1d(pred_scaled[:, 2])
                 if pred_scaled.size(1) >= 4:
-                    dbg['nu_t_star'] = self._stat1d(F.softplus(pred_scaled[:, 3]))
+                    dbg['nu_t_star'] = self._stat1d(pred_scaled[:, 3])  # already softplus'd during scaling
                 # 기하/면적/차수
                 dbg.update(self._collect_geom_stats(data, pos_scaled, edge_attr_used, self.Lref))
                 # 연속 방정식 잔차 분포

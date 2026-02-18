@@ -45,7 +45,7 @@ wandb/
 
 # Project data
 Dataset/
-downsampled_graphs/
+downsampled_graphs_v2/
 prebuilt_edges_v2/
 processed_edges/
 *.pt

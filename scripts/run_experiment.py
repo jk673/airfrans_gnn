@@ -84,6 +84,7 @@ def main():
     print(f"Model: {n_params:,} parameters")
 
     # --- Physics loss ---
+    steps_per_epoch = len(train_loader)
     loss_fn = NavierStokesPhysicsLoss(
         continuity_loss_weight=scfg.continuity_loss_weight,
         continuity_target_weight=scfg.continuity_target_weight,
@@ -91,12 +92,12 @@ def main():
         momentum_target_weight=scfg.momentum_target_weight,
         bc_loss_weight=scfg.bc_loss_weight,
         ramp_mode=scfg.ramp_mode,
-        cont_ramp_start_step=scfg.cont_ramp_start_epoch,
-        cont_curriculum_ramp_steps=scfg.cont_ramp_epochs,
-        mom_ramp_start_step=scfg.mom_ramp_start_epoch,
-        mom_curriculum_ramp_steps=scfg.mom_ramp_epochs,
-        bc_ramp_start_step=scfg.bc_ramp_start_epoch,
-        bc_curriculum_ramp_steps=scfg.bc_ramp_epochs,
+        cont_ramp_start_step=scfg.cont_ramp_start_epoch * steps_per_epoch,
+        cont_curriculum_ramp_steps=scfg.cont_ramp_epochs * steps_per_epoch,
+        mom_ramp_start_step=scfg.mom_ramp_start_epoch * steps_per_epoch,
+        mom_curriculum_ramp_steps=scfg.mom_ramp_epochs * steps_per_epoch,
+        bc_ramp_start_step=scfg.bc_ramp_start_epoch * steps_per_epoch,
+        bc_curriculum_ramp_steps=scfg.bc_ramp_epochs * steps_per_epoch,
         chord_length=scfg.chord_length,
         nu_molecular=scfg.nu_molecular,
         dynamic_uref_from_data=scfg.dynamic_uref_from_data,
