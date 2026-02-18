@@ -6,17 +6,184 @@ Consolidated from experiment_table.py, experiment_tracker.py, and benchmark_logg
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+import torch
+from scipy import stats as sp_stats
 from torch.utils.data import DataLoader
+from torch_geometric.data import Data
+from tqdm.auto import tqdm
 
 from src.data import DataBundle, NormalizedDataset, collate_pyg, enrich_edge_features, _prep_graph_for_norm
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+# ---------------------------------------------------------------------------
+# Benchmark metric helpers (from deleted src/metrics.py)
+# ---------------------------------------------------------------------------
+
+def surface_mask_from_x_phys(x_phys: torch.Tensor) -> torch.Tensor:
+    """Extract surface mask from physical node features."""
+    if x_phys.size(1) >= 5:
+        return (x_phys[:, 2] < 1e-6) | (x_phys[:, 3:5].abs().sum(dim=1) > 0)
+    if x_phys.size(1) >= 3:
+        return x_phys[:, 2] < 1e-6
+    return torch.zeros(x_phys.size(0), dtype=torch.bool)
+
+
+def _order_surface(pos_surf: torch.Tensor) -> torch.Tensor:
+    """Order surface nodes by angle around centroid."""
+    c = pos_surf.mean(dim=0)
+    rel = pos_surf - c
+    return torch.argsort(torch.atan2(rel[:, 1], rel[:, 0]))
+
+
+def _panel_lengths(pos_ordered: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Compute panel lengths and segment vectors for surface panels."""
+    seg = torch.roll(pos_ordered, -1, 0) - pos_ordered
+    return seg.norm(dim=1), seg
+
+
+def compute_force_coefficients(
+    data: Data, eps: float = 1e-9
+) -> Optional[Dict[str, float]]:
+    """Compute drag (CD) and lift (CL) coefficients from surface pressure."""
+    xvars = data.x.cpu() if isinstance(data.x, torch.Tensor) else torch.tensor(data.x)
+    yvars = data.y.cpu() if isinstance(data.y, torch.Tensor) else torch.tensor(data.y)
+    pos = (
+        data.pos.cpu() if data.pos is not None and isinstance(data.pos, torch.Tensor)
+        else torch.tensor(data.pos) if data.pos is not None
+        else None
+    )
+    if pos is None:
+        N = xvars.size(0)
+        pos = torch.zeros(N, 2)
+        pos[:, 0] = torch.linspace(0, 1, N)
+
+    normals = xvars[:, 3:5]
+    surf_idx = torch.nonzero(normals.abs().sum(dim=1) > 0, as_tuple=False).squeeze(-1).long()
+    if surf_idx.numel() < 5:
+        return None
+
+    pos_surf = pos[surf_idx]
+    ord_idx = _order_surface(pos_surf).long()
+    ds, _ = _panel_lengths(pos_surf[ord_idx])
+    n_hat = normals[surf_idx[ord_idx]]
+    n_hat = n_hat / n_hat.norm(dim=1, keepdim=True).clamp_min(eps)
+
+    u_inf, v_inf = float(xvars[0, 0]), float(xvars[0, 1])
+    U_inf = math.sqrt(u_inf**2 + v_inf**2) + eps
+
+    p_over_rho = torch.index_select(yvars, 0, surf_idx)[:, 2][ord_idx]
+    Fp = (-p_over_rho.unsqueeze(1) * n_hat) * ds.unsqueeze(1)
+    F = Fp.sum(dim=0)
+
+    chord = float(pos_surf[:, 0].max() - pos_surf[:, 0].min() + eps)
+    q_ref = 0.5 * U_inf**2
+    return {
+        'CD': float(-F[0] / (q_ref * chord + eps)),
+        'CL': float(F[1] / (q_ref * chord + eps)),
+    }
+
+
+# ---------------------------------------------------------------------------
+# score_test_set — benchmark scoring on a test DataLoader
+# ---------------------------------------------------------------------------
+
+@torch.no_grad()
+def score_test_set(
+    eval_loader: DataLoader,
+    model: torch.nn.Module,
+    x_scaler,
+    y_scaler,
+    device: torch.device,
+    *,
+    eps: float = 1e-12,
+    verbose: bool = False,
+) -> Dict[str, float]:
+    """Compute all 6 FLOW-GLIDE benchmark metrics on the given test loader."""
+    model.eval()
+
+    vol_sum_err2, vol_sum_gt2 = 0.0, 0.0
+    surf_sum_err2, surf_sum_gt2 = 0.0, 0.0
+    cd_gt_list: List[float] = []
+    cd_pred_list: List[float] = []
+    cl_gt_list: List[float] = []
+    cl_pred_list: List[float] = []
+
+    for idx, batch in enumerate(tqdm(eval_loader, desc="Scoring", leave=True)):
+        if batch is None:
+            continue
+        b = batch.to(device)
+        pred_norm = model(b).detach().cpu()
+        targ_norm = b.y.detach().cpu()
+
+        pred_phys = y_scaler.inverse(pred_norm)
+        targ_phys = y_scaler.inverse(targ_norm)
+        x_phys = x_scaler.inverse(b.x.detach().cpu())
+
+        surf_mask = surface_mask_from_x_phys(x_phys)
+
+        all_err = (pred_phys - targ_phys).float()
+        all_gt = targ_phys.float()
+        vol_sum_err2 += float((all_err ** 2).sum().item())
+        vol_sum_gt2 += float((all_gt ** 2).sum().item())
+
+        if surf_mask.any():
+            p_pred_surf = pred_phys[surf_mask, 2]
+            p_gt_surf = targ_phys[surf_mask, 2]
+            surf_err = (p_pred_surf - p_gt_surf).float()
+            surf_sum_err2 += float((surf_err ** 2).sum().item())
+            surf_sum_gt2 += float((p_gt_surf ** 2).sum().item())
+
+        batch_ids = b.batch.detach().cpu() if hasattr(b, 'batch') and b.batch is not None else torch.zeros(x_phys.size(0), dtype=torch.long)
+        for bid in batch_ids.unique():
+            mask_b = (batch_ids == bid)
+            d_gt = Data(x=x_phys[mask_b], y=targ_phys[mask_b],
+                        pos=b.pos[mask_b].detach().cpu() if b.pos is not None else None)
+            d_pred = Data(x=x_phys[mask_b], y=pred_phys[mask_b],
+                          pos=b.pos[mask_b].detach().cpu() if b.pos is not None else None)
+            coeffs_gt = compute_force_coefficients(d_gt)
+            coeffs_pred = compute_force_coefficients(d_pred)
+            if coeffs_gt is not None and coeffs_pred is not None:
+                cd_gt_list.append(coeffs_gt['CD'])
+                cd_pred_list.append(coeffs_pred['CD'])
+                cl_gt_list.append(coeffs_gt['CL'])
+                cl_pred_list.append(coeffs_pred['CL'])
+
+    results: Dict[str, float] = {}
+    results['volume_rel_l2'] = math.sqrt(vol_sum_err2 / (vol_sum_gt2 + eps))
+    results['surface_rel_l2'] = math.sqrt(surf_sum_err2 / (surf_sum_gt2 + eps))
+
+    if len(cd_gt_list) > 0:
+        cd_gt, cd_pred = np.array(cd_gt_list), np.array(cd_pred_list)
+        cl_gt, cl_pred = np.array(cl_gt_list), np.array(cl_pred_list)
+        results['cd_relative_error'] = float(np.mean(np.abs(cd_pred - cd_gt) / (np.abs(cd_gt) + 1e-12)))
+        results['cl_relative_error'] = float(np.mean(np.abs(cl_pred - cl_gt) / (np.abs(cl_gt) + 1e-12)))
+        if len(cd_gt_list) >= 3:
+            rho_d, _ = sp_stats.spearmanr(cd_gt, cd_pred)
+            rho_l, _ = sp_stats.spearmanr(cl_gt, cl_pred)
+            results['rho_d'] = float(rho_d) if not np.isnan(rho_d) else 0.0
+            results['rho_l'] = float(rho_l) if not np.isnan(rho_l) else 0.0
+        else:
+            results['rho_d'] = float('nan')
+            results['rho_l'] = float('nan')
+        results['_n_graphs_with_coefficients'] = len(cd_gt_list)
+    else:
+        results['cd_relative_error'] = float('nan')
+        results['cl_relative_error'] = float('nan')
+        results['rho_d'] = float('nan')
+        results['rho_l'] = float('nan')
+        results['_n_graphs_with_coefficients'] = 0
+
+    return results
+
 
 # ---------------------------------------------------------------------------
 # FLOW-GLIDE table constants
@@ -434,8 +601,6 @@ def run_benchmark_and_log_experiment(
     tracker=None,
 ):
     """Compute FLOW-GLIDE benchmark metrics, log experiment, and update table."""
-    from scripts.score_benchmark import score_test_set
-
     tracker = tracker or ExperimentTracker(
         log_dir=PROJECT_ROOT / "experiments",
         project_name="AirfRANS 2D Airfoil - GNN Surrogate",

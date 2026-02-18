@@ -327,15 +327,16 @@ class NavierStokesPhysicsLoss(nn.Module):
 
     @property
     def bc_loss_weight(self) -> float:
-        return self.bc_w
+        return self.bc_w0
     @bc_loss_weight.setter
     def bc_loss_weight(self, v: float):
-        self.bc_w = float(v)
+        self.bc_w0 = float(v)
 
     def __init__(
         self,
         data_loss_weight: float = 1.0,
         bc_loss_weight: float = 0.0,
+        bc_target_weight: float | None = None,  # None → bc_loss_weight 그대로 사용
 
         # continuity
         continuity_loss_weight: float = 0.10,   # 연속항 시작값
@@ -384,7 +385,8 @@ class NavierStokesPhysicsLoss(nn.Module):
 
         # Internal weights must always be floats
         self.data_w = float(data_loss_weight)
-        self.bc_w   = float(bc_loss_weight)
+        self.bc_w0  = float(bc_loss_weight)
+        self.bc_w_target = float(bc_target_weight if bc_target_weight is not None else bc_loss_weight)
 
         # continuity
         self.cont_w0 = float(continuity_loss_weight)
@@ -998,17 +1000,17 @@ class NavierStokesPhysicsLoss(nn.Module):
             losses.setdefault("bc_inlet_loss", torch.tensor(0.0, device=device))
             losses.setdefault("bc_outlet_loss", torch.tensor(0.0, device=device))
             losses.setdefault("bc_farfield_loss", torch.tensor(0.0, device=device))
-        if self.bc_w <= 0.0:
+        if self.bc_w0 <= 0.0 and self.bc_w_target <= 0.0:
             losses["bc_loss"] = torch.tensor(0.0, device=device)
 
         # 6) Curriculum ramp (per-component)
         r_cont = self._ramp_factor(step, self.cont_curr_steps, self.cont_ramp_start_step)
         r_mom  = self._ramp_factor(step, self.mom_curr_steps,  self.mom_ramp_start_step)
         r_bc   = self._ramp_factor(step, self.bc_curr_steps,   self.bc_ramp_start_step)
-        bc_w   = self.bc_w * r_bc
 
         cont_w = self.cont_w0 + (self.cont_w_target - self.cont_w0) * r_cont
         mom_w  = self.mom_w0  + (self.mom_w_target  - self.mom_w0)  * r_mom
+        bc_w   = self.bc_w0   + (self.bc_w_target   - self.bc_w0)   * r_bc
 
         total = (
             self.data_w * mse_loss

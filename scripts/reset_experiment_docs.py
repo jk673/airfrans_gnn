@@ -22,6 +22,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_EXPERIMENT_LOG = ROOT / "experiments" / "EXPERIMENT_LOG.md"
 DEFAULT_EXPERIMENT_DOC = ROOT / "docs" / "optuna" / "EXAMPLES_OPTUNA.md"
 DEFAULT_EXPERIMENT_RESULTS_DIR = ROOT / "experiments" / "results"
+DEFAULT_FLOW_GLIDE_TABLE = ROOT / "experiments" / "flow_glide_comparison_table.md"
+
+BASELINE_MODELS = {"Transolver", "FLOW-GLIDE"}
 
 
 def _timestamp() -> str:
@@ -96,6 +99,39 @@ def _write(path: Path, content: str, do_backup: bool, dry_run: bool) -> Path | s
     return backup
 
 
+def _reset_flow_glide_table(path: Path, do_backup: bool, dry_run: bool) -> Path | str | None:
+    """Remove experiment rows from flow_glide_comparison_table.md, keeping baselines."""
+    if not path.exists():
+        return None
+    if dry_run:
+        return "(dry-run)"
+
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    kept: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        # Keep non-table-row lines (headers, separators) unconditionally
+        if not stripped.startswith("|"):
+            kept.append(line)
+            continue
+        # Keep table header and separator rows
+        if stripped.startswith("|---") or stripped.startswith("| Model"):
+            kept.append(line)
+            continue
+        # Keep baseline rows, drop experiment rows
+        model_cell = stripped.split("|")[1].strip() if "|" in stripped else ""
+        if model_cell in BASELINE_MODELS:
+            kept.append(line)
+
+    if do_backup:
+        backup = _backup_if_exists(path)
+    else:
+        backup = None
+
+    path.write_text("".join(kept), encoding="utf-8")
+    return backup
+
+
 def _delete_results_jsons(results_dir: Path, dry_run: bool) -> list[Path]:
     if not results_dir.exists():
         return []
@@ -145,10 +181,21 @@ def parse_args() -> argparse.Namespace:
         help="Skip deleting experiments/results/*.json",
     )
     parser.add_argument(
+        "--skip-flow-glide-table",
+        action="store_true",
+        help="Skip resetting experiments/flow_glide_comparison_table.md",
+    )
+    parser.add_argument(
         "--results-dir",
         type=Path,
         default=DEFAULT_EXPERIMENT_RESULTS_DIR,
         help="Directory containing experiment result JSON files",
+    )
+    parser.add_argument(
+        "--flow-glide-table-path",
+        type=Path,
+        default=DEFAULT_FLOW_GLIDE_TABLE,
+        help="Path to flow_glide_comparison_table.md",
     )
     parser.add_argument(
         "--dry-run",
@@ -199,6 +246,19 @@ def main() -> None:
                 print(f" - {path}")
         else:
             print(f"deleted: {len(removed_json)} json file(s) under {args.results_dir}")
+
+    if not args.skip_flow_glide_table:
+        backup = _reset_flow_glide_table(
+            args.flow_glide_table_path,
+            do_backup=backup_enabled,
+            dry_run=args.dry_run,
+        )
+        if args.dry_run:
+            print(f"[dry-run] would reset {args.flow_glide_table_path}")
+        else:
+            print(f"reset: {args.flow_glide_table_path} (kept baselines only)")
+            if backup:
+                print(f" backup: {backup}")
 
 
 if __name__ == "__main__":

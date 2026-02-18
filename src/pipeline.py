@@ -197,6 +197,7 @@ def build_physics_loss(config: dict, steps_per_epoch: int) -> NavierStokesPhysic
         mom_ramp_start_step=mom.get("ramp_start_epoch", 0) * steps_per_epoch,
         mom_curriculum_ramp_steps=mom.get("ramp_epochs", 0) * steps_per_epoch,
         bc_loss_weight=bc.get("weight", 0.1),
+        bc_target_weight=bc.get("target", None),
         bc_ramp_start_step=bc.get("ramp_start_epoch", 0) * steps_per_epoch,
         bc_curriculum_ramp_steps=bc.get("ramp_epochs", 0) * steps_per_epoch,
         ramp_mode=config.get("ramp_mode", "linear"),
