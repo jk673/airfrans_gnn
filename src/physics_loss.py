@@ -336,18 +336,14 @@ class NavierStokesPhysicsLoss(nn.Module):
         momentum_loss_weight: float = 0.05,     # 모멘텀 시작값
         momentum_target_weight: float = 0.20,   # 모멘텀 목표값
 
-        # ramp schedule
-        curriculum_ramp_steps: int = 0,         # 공용 램프 스텝(0이면 비활성)
-        cont_curriculum_ramp_steps: int = -1,   # 연속항 전용 스텝(-1이면 공용 사용)
-        mom_curriculum_ramp_steps: int = -1,    # 모멘텀 전용 스텝(-1이면 공용 사용)
-        ramp_mode: str = "linear",        
-
-        # NEW: ramp start (in global steps)
-        ramp_start_step: int = 0,          # 공용 시작 스텝(0=즉시 시작)
-        cont_ramp_start_step: int = -1,    # 개별 시작 스텝(-1=공용 사용)
-        mom_ramp_start_step: int = -1,     # 개별 시작 스텝(-1=공용 사용)
-        bc_ramp_start_step: int = -1,      # BC 시작 스텝(-1=공용 사용)
-        bc_curriculum_ramp_steps: int = -1, # BC 전용 램프 스텝(-1=공용 사용)
+        # per-component ramp schedule (in global steps)
+        cont_curriculum_ramp_steps: int = 0,
+        cont_ramp_start_step: int = 0,
+        mom_curriculum_ramp_steps: int = 0,
+        mom_ramp_start_step: int = 0,
+        bc_curriculum_ramp_steps: int = 0,
+        bc_ramp_start_step: int = 0,
+        ramp_mode: str = "linear",
 
         # physics
         reynolds_number: float = 1e6,          # used if dynamic_re_from_data=False
@@ -389,15 +385,13 @@ class NavierStokesPhysicsLoss(nn.Module):
         self.mom_w0 = float(momentum_loss_weight)
         self.mom_w_target = float(momentum_target_weight)
 
-        # schedules
-        self.curr_steps = int(curriculum_ramp_steps)
+        # per-component schedules
         self.cont_curr_steps = int(cont_curriculum_ramp_steps)
-        self.mom_curr_steps  = int(mom_curriculum_ramp_steps)
-        self.ramp_start_step = int(ramp_start_step)
         self.cont_ramp_start_step = int(cont_ramp_start_step)
+        self.mom_curr_steps  = int(mom_curriculum_ramp_steps)
         self.mom_ramp_start_step  = int(mom_ramp_start_step)
-        self.bc_ramp_start_step   = int(bc_ramp_start_step)
         self.bc_curr_steps        = int(bc_curriculum_ramp_steps)
+        self.bc_ramp_start_step   = int(bc_ramp_start_step)
         self.ramp_mode = str(ramp_mode)
 
         self.Re = reynolds_number
@@ -847,15 +841,6 @@ class NavierStokesPhysicsLoss(nn.Module):
         )
         return bc_terms
 
-    # ---------- curriculum ramp ----------
-    def _ramp(self, step_or_epoch: Optional[int]) -> float:
-        if not self.curr_steps or self.curr_steps <= 0:
-            return 1.0
-        if step_or_epoch is None:
-            return 1.0
-        t = max(0, min(step_or_epoch, self.curr_steps))
-        return float(t) / float(self.curr_steps)
-
     # ---------- forward ----------
     def forward(
         self,
@@ -956,17 +941,10 @@ class NavierStokesPhysicsLoss(nn.Module):
         if self.bc_w <= 0.0:
             losses["bc_loss"] = torch.tensor(0.0, device=device)
 
-        # 6) Curriculum ramp
-        cont_steps = self.cont_curr_steps if self.cont_curr_steps >= 0 else self.curr_steps
-        mom_steps  = self.mom_curr_steps  if self.mom_curr_steps  >= 0 else self.curr_steps
-        bc_steps   = self.bc_curr_steps   if self.bc_curr_steps   >= 0 else self.curr_steps
-        cont_start = self.cont_ramp_start_step if self.cont_ramp_start_step >= 0 else self.ramp_start_step
-        mom_start  = self.mom_ramp_start_step  if self.mom_ramp_start_step  >= 0 else self.ramp_start_step
-        bc_start   = self.bc_ramp_start_step   if self.bc_ramp_start_step   >= 0 else self.ramp_start_step
-
-        r_cont = self._ramp_factor(step, cont_steps, cont_start)
-        r_mom  = self._ramp_factor(step, mom_steps,  mom_start)
-        r_bc   = self._ramp_factor(step, bc_steps,   bc_start)
+        # 6) Curriculum ramp (per-component)
+        r_cont = self._ramp_factor(step, self.cont_curr_steps, self.cont_ramp_start_step)
+        r_mom  = self._ramp_factor(step, self.mom_curr_steps,  self.mom_ramp_start_step)
+        r_bc   = self._ramp_factor(step, self.bc_curr_steps,   self.bc_ramp_start_step)
         bc_w   = self.bc_w * r_bc
 
         cont_w = self.cont_w0 + (self.cont_w_target - self.cont_w0) * r_cont

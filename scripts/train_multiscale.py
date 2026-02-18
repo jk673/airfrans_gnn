@@ -345,8 +345,8 @@ def main():
         continuity_target_weight=scfg.continuity_target_weight,
         momentum_loss_weight=scfg.momentum_loss_weight,
         momentum_target_weight=scfg.momentum_target_weight,
-        curriculum_ramp_steps=scfg.ramp_epochs * steps_per_epoch,
-        ramp_start_step=scfg.ramp_start_epoch * steps_per_epoch,
+        curriculum_ramp_steps=scfg.cont_ramp_epochs * steps_per_epoch,
+        ramp_start_step=scfg.cont_ramp_start_epoch * steps_per_epoch,
         ramp_mode=scfg.ramp_mode,
         bc_loss_weight=scfg.bc_loss_weight,
 

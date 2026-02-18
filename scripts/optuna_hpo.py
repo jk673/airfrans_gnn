@@ -110,9 +110,13 @@ def objective(trial: optuna.Trial, data_bundle: DataBundle, device: torch.device
         'momentum_target_weight', momentum_weight, 1.0)
     bc_loss_weight = trial.suggest_float('bc_loss_weight', 0.001, 0.3, log=True)
 
-    # 5) Curriculum Learning
-    ramp_start_epoch = trial.suggest_int('ramp_start_epoch', 5, 20)
-    ramp_epochs = trial.suggest_int('ramp_epochs', 10, 30)
+    # 5) Curriculum Learning (per-component)
+    cont_ramp_start_epoch = trial.suggest_int('cont_ramp_start_epoch', 5, 20)
+    cont_ramp_epochs = trial.suggest_int('cont_ramp_epochs', 10, 30)
+    mom_ramp_start_epoch = trial.suggest_int('mom_ramp_start_epoch', 5, 20)
+    mom_ramp_epochs = trial.suggest_int('mom_ramp_epochs', 10, 30)
+    bc_ramp_start_epoch = trial.suggest_int('bc_ramp_start_epoch', 5, 20)
+    bc_ramp_epochs = trial.suggest_int('bc_ramp_epochs', 10, 30)
     ramp_mode = trial.suggest_categorical('ramp_mode', ['linear', 'cosine'])
 
     # 6) Global Context & Attention
@@ -151,8 +155,12 @@ def objective(trial: optuna.Trial, data_bundle: DataBundle, device: torch.device
         momentum_loss_weight=momentum_weight,
         momentum_target_weight=momentum_target_weight,
         bc_loss_weight=bc_loss_weight,
-        ramp_start_epoch=ramp_start_epoch,
-        ramp_epochs=ramp_epochs,
+        cont_ramp_start_epoch=cont_ramp_start_epoch,
+        cont_ramp_epochs=cont_ramp_epochs,
+        mom_ramp_start_epoch=mom_ramp_start_epoch,
+        mom_ramp_epochs=mom_ramp_epochs,
+        bc_ramp_start_epoch=bc_ramp_start_epoch,
+        bc_ramp_epochs=bc_ramp_epochs,
         ramp_mode=ramp_mode,
         use_global_tokens=use_global_tokens,
         num_global_tokens=num_global_tokens,
@@ -200,15 +208,13 @@ def objective(trial: optuna.Trial, data_bundle: DataBundle, device: torch.device
         continuity_target_weight=config.continuity_target_weight,
         momentum_loss_weight=config.momentum_loss_weight,
         momentum_target_weight=config.momentum_target_weight,
-        curriculum_ramp_steps=config.ramp_epochs * spe,
-        ramp_start_step=config.ramp_start_epoch * spe,
         ramp_mode=config.ramp_mode,
-        cont_ramp_start_step=getattr(config, 'cont_ramp_start_epoch', -1) * spe if getattr(config, 'cont_ramp_start_epoch', -1) >= 0 else -1,
-        cont_curriculum_ramp_steps=getattr(config, 'cont_ramp_epochs', -1) * spe if getattr(config, 'cont_ramp_epochs', -1) >= 0 else -1,
-        mom_ramp_start_step=getattr(config, 'mom_ramp_start_epoch', -1) * spe if getattr(config, 'mom_ramp_start_epoch', -1) >= 0 else -1,
-        mom_curriculum_ramp_steps=getattr(config, 'mom_ramp_epochs', -1) * spe if getattr(config, 'mom_ramp_epochs', -1) >= 0 else -1,
-        bc_ramp_start_step=getattr(config, 'bc_ramp_start_epoch', -1) * spe if getattr(config, 'bc_ramp_start_epoch', -1) >= 0 else -1,
-        bc_curriculum_ramp_steps=getattr(config, 'bc_ramp_epochs', -1) * spe if getattr(config, 'bc_ramp_epochs', -1) >= 0 else -1,
+        cont_ramp_start_step=config.cont_ramp_start_epoch * spe,
+        cont_curriculum_ramp_steps=config.cont_ramp_epochs * spe,
+        mom_ramp_start_step=config.mom_ramp_start_epoch * spe,
+        mom_curriculum_ramp_steps=config.mom_ramp_epochs * spe,
+        bc_ramp_start_step=config.bc_ramp_start_epoch * spe,
+        bc_curriculum_ramp_steps=config.bc_ramp_epochs * spe,
         bc_loss_weight=config.bc_loss_weight,
         chord_length=getattr(config, 'chord_length', 1.0),
         dynamic_uref_from_data=getattr(config, 'dynamic_uref_from_data', True),
@@ -453,8 +459,12 @@ def build_config_from_best(study: optuna.Study, epochs: int = 100) -> SmokeCfg:
         momentum_loss_weight=best_params['momentum_weight'],
         momentum_target_weight=best_params['momentum_target_weight'],
         bc_loss_weight=best_params['bc_loss_weight'],
-        ramp_start_epoch=best_params['ramp_start_epoch'],
-        ramp_epochs=best_params['ramp_epochs'],
+        cont_ramp_start_epoch=best_params['cont_ramp_start_epoch'],
+        cont_ramp_epochs=best_params['cont_ramp_epochs'],
+        mom_ramp_start_epoch=best_params['mom_ramp_start_epoch'],
+        mom_ramp_epochs=best_params['mom_ramp_epochs'],
+        bc_ramp_start_epoch=best_params['bc_ramp_start_epoch'],
+        bc_ramp_epochs=best_params['bc_ramp_epochs'],
         ramp_mode=best_params.get('ramp_mode', 'linear'),
         use_global_tokens=best_params['use_global_tokens'],
         num_global_tokens=best_params.get('num_global_tokens', 4),
@@ -653,7 +663,10 @@ def main():
             'continuity_weight': 0.05, 'continuity_target_weight': 0.10,
             'momentum_weight': 0.05, 'momentum_target_weight': 0.10,
             'bc_loss_weight': 0.05,
-            'ramp_start_epoch': 10, 'ramp_epochs': 10, 'ramp_mode': 'linear',
+            'cont_ramp_start_epoch': 10, 'cont_ramp_epochs': 10,
+            'mom_ramp_start_epoch': 10, 'mom_ramp_epochs': 10,
+            'bc_ramp_start_epoch': 10, 'bc_ramp_epochs': 10,
+            'ramp_mode': 'linear',
             'use_global_tokens': True, 'num_global_tokens': 4,
             'attention_heads': 4, 'attention_layers': 2,
             'use_cross_attention': True, 'positional_encoding': False,

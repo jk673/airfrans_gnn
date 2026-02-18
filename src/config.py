@@ -90,17 +90,15 @@ class SmokeCfg:
     rop_min_lr: float = 1e-6
 
     # Physics-Informed Loss Configuration
-    ramp_start_epoch: int = 40
-    ramp_epochs: int = 60
     ramp_mode: str = 'linear'
 
-    # Per-component ramp overrides (-1 = use shared ramp_start_epoch / ramp_epochs)
-    cont_ramp_start_epoch: int = -1
-    cont_ramp_epochs: int = -1
-    mom_ramp_start_epoch: int = -1
-    mom_ramp_epochs: int = -1
-    bc_ramp_start_epoch: int = -1
-    bc_ramp_epochs: int = -1
+    # Per-component ramp schedule (epoch units)
+    cont_ramp_start_epoch: int = 0
+    cont_ramp_epochs: int = 0
+    mom_ramp_start_epoch: int = 0
+    mom_ramp_epochs: int = 0
+    bc_ramp_start_epoch: int = 0
+    bc_ramp_epochs: int = 0
 
     data_loss_weight: float = 1.0
     continuity_loss_weight: float = 0.05
@@ -243,27 +241,23 @@ def parse_args(argv=None):
                         help='Target momentum loss weight after ramp')
     parser.add_argument('--bc-loss-weight', type=float, default=0.1,
                         help='Boundary condition loss weight')
-    parser.add_argument('--ramp-start-epoch', type=int, default=40,
-                        help='Epoch to start physics loss curriculum ramp')
-    parser.add_argument('--ramp-epochs', type=int, default=60,
-                        help='Number of epochs for curriculum ramp')
     parser.add_argument('--ramp-mode', type=str, default='linear',
                         choices=['linear', 'cosine'],
                         help='Curriculum ramp schedule mode')
 
-    # Per-component ramp overrides (-1 = use shared values)
-    parser.add_argument('--cont-ramp-start-epoch', type=int, default=-1,
-                        help='Epoch to start continuity loss ramp (-1 = use --ramp-start-epoch)')
-    parser.add_argument('--cont-ramp-epochs', type=int, default=-1,
-                        help='Ramp duration for continuity loss (-1 = use --ramp-epochs)')
-    parser.add_argument('--mom-ramp-start-epoch', type=int, default=-1,
-                        help='Epoch to start momentum loss ramp (-1 = use --ramp-start-epoch)')
-    parser.add_argument('--mom-ramp-epochs', type=int, default=-1,
-                        help='Ramp duration for momentum loss (-1 = use --ramp-epochs)')
-    parser.add_argument('--bc-ramp-start-epoch', type=int, default=-1,
-                        help='Epoch to start BC loss ramp (-1 = use --ramp-start-epoch)')
-    parser.add_argument('--bc-ramp-epochs', type=int, default=-1,
-                        help='Ramp duration for BC loss (-1 = use --ramp-epochs)')
+    # Per-component ramp schedules
+    parser.add_argument('--cont-ramp-start-epoch', type=int, default=0,
+                        help='Epoch to start continuity loss ramp')
+    parser.add_argument('--cont-ramp-epochs', type=int, default=0,
+                        help='Ramp duration for continuity loss (0 = full weight from start)')
+    parser.add_argument('--mom-ramp-start-epoch', type=int, default=0,
+                        help='Epoch to start momentum loss ramp')
+    parser.add_argument('--mom-ramp-epochs', type=int, default=0,
+                        help='Ramp duration for momentum loss (0 = full weight from start)')
+    parser.add_argument('--bc-ramp-start-epoch', type=int, default=0,
+                        help='Epoch to start BC loss ramp')
+    parser.add_argument('--bc-ramp-epochs', type=int, default=0,
+                        help='Ramp duration for BC loss (0 = full weight from start)')
 
     # Physics parameters
     parser.add_argument('--chord-length', type=float, default=1.0,

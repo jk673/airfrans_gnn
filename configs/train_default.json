@@ -27,8 +27,6 @@
   "rop_patience": 5,
   "rop_min_lr": 1e-06,
   "scheduler_step_per_batch": false,
-  "ramp_start_epoch": 40,
-  "ramp_epochs": 60,
   "ramp_mode": "linear",
   "cont_ramp_start_epoch": 20,
   "cont_ramp_epochs": 10,

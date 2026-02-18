@@ -196,6 +196,7 @@ def main():
               f"bc {scfg.bc_loss_weight:.3f} (ep {_bc_start}+{_bc_dur})")
 
     # --- LR Scheduler ---
+    # 이부분에서 심플하게 어떤 scheduler를 쓸지 간단하게 선택할 수 있도록 만들어보자. 예를 들어 cosine, step, plateau 등등.
     lr_scheduler = create_lr_scheduler(optimizer, scfg)
 
     # --- W&B (rank 0 only) ---
