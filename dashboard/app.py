@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -165,6 +166,37 @@ def list_experiments():
         experiments.append(row)
 
     return jsonify({"baselines": baselines, "experiments": experiments})
+
+
+@app.route("/api/gpu")
+def get_gpu():
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi",
+             "--query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit",
+             "--format=csv,noheader,nounits"],
+            text=True, timeout=3,
+        )
+        gpus = []
+        for line in out.strip().splitlines():
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) < 8:
+                continue
+            mem_used, mem_total = int(parts[3]), int(parts[4])
+            gpus.append({
+                "index": int(parts[0]),
+                "name": parts[1],
+                "gpu_util": int(parts[2]) if parts[2] not in ("N/A", "") else 0,
+                "mem_used": mem_used,
+                "mem_total": mem_total,
+                "mem_util": round(mem_used * 100 / mem_total) if mem_total > 0 else 0,
+                "temp": int(parts[5]) if parts[5] not in ("N/A", "") else 0,
+                "power_draw": float(parts[6]) if parts[6] not in ("N/A", "") else 0,
+                "power_limit": float(parts[7]) if parts[7] not in ("N/A", "") else 0,
+            })
+        return jsonify({"gpus": gpus})
+    except Exception as e:
+        return jsonify({"gpus": [], "error": str(e)})
 
 
 @app.route("/api/experiments/<exp_id>")

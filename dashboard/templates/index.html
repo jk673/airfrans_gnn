@@ -131,10 +131,54 @@
   .physics-sub { background:#0f1a2e; border-radius:6px; padding:10px; }
   .physics-sub h4 { font-size:0.8em; color:#a8a8b3; margin-bottom:8px; text-align:center; }
 
+  /* ── GPU Monitor floating panel ── */
+  .gpu-panel {
+    position:fixed; bottom:16px; right:16px; width:320px;
+    background:#16213e; border:1px solid #333; border-radius:10px;
+    box-shadow:0 4px 24px rgba(0,0,0,.5); z-index:1000;
+    font-size:0.8em; overflow:hidden;
+    transition: width .2s, height .2s;
+  }
+  .gpu-panel.collapsed { width:auto; }
+  .gpu-panel.collapsed .gpu-body { display:none; }
+  .gpu-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 12px; background:#0f1a2e; cursor:pointer; user-select:none;
+  }
+  .gpu-header h3 { font-size:0.85em; color:#4ecca3; margin:0; }
+  .gpu-header .toggle-btn {
+    background:none; border:none; color:#888; cursor:pointer;
+    font-size:1.1em; font-family:inherit; padding:0 4px;
+  }
+  .gpu-header .toggle-btn:hover { color:#eee; }
+  .gpu-body { padding:10px 12px; }
+  .gpu-card { margin-bottom:8px; }
+  .gpu-card:last-child { margin-bottom:0; }
+  .gpu-card .gpu-name { color:#a8a8b3; font-size:0.85em; margin-bottom:4px; }
+  .gpu-bar-row { display:flex; align-items:center; gap:6px; margin-bottom:3px; }
+  .gpu-bar-row .bar-label { flex:0 0 40px; color:#888; font-size:0.8em; text-align:right; }
+  .gpu-bar-outer {
+    flex:1; height:14px; background:#0f1a2e; border-radius:3px; overflow:hidden;
+    position:relative;
+  }
+  .gpu-bar-inner {
+    height:100%; border-radius:3px; transition:width .5s ease;
+  }
+  .gpu-bar-text {
+    position:absolute; right:4px; top:0; line-height:14px;
+    font-size:0.75em; color:#ccc;
+  }
+  .gpu-stats { display:flex; gap:12px; color:#888; font-size:0.78em; margin-top:2px; }
+  .gpu-stats span { white-space:nowrap; }
+  .bar-green { background:#4ecca3; }
+  .bar-yellow { background:#f39c12; }
+  .bar-red { background:#e74c3c; }
+
   @media (max-width:900px) {
     .config-grid { grid-template-columns:1fr; }
     .chart-grid { grid-template-columns:1fr 1fr; }
     .physics-grid { grid-template-columns:1fr; }
+    .gpu-panel { width:260px; }
   }
 </style>
 </head>
@@ -193,6 +237,17 @@
   <div class="exp-detail" id="exp-detail">
     <h3 id="exp-detail-title">Experiment Detail</h3>
     <div class="detail-grid" id="exp-detail-grid"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ GPU MONITOR (floating) ═══════════════════════ -->
+<div class="gpu-panel" id="gpu-panel">
+  <div class="gpu-header" onclick="toggleGpuPanel()">
+    <h3>GPU Monitor</h3>
+    <button class="toggle-btn" id="gpu-toggle">&#9660;</button>
+  </div>
+  <div class="gpu-body" id="gpu-body">
+    <div id="gpu-cards"><span style="color:#555">Loading...</span></div>
   </div>
 </div>
 
@@ -591,12 +646,71 @@ function showExpDetail(idx) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// GPU MONITOR
+// ═══════════════════════════════════════════════════════════════
+let gpuCollapsed = false;
+
+function toggleGpuPanel() {
+  gpuCollapsed = !gpuCollapsed;
+  document.getElementById('gpu-panel').classList.toggle('collapsed', gpuCollapsed);
+  document.getElementById('gpu-toggle').innerHTML = gpuCollapsed ? '&#9650;' : '&#9660;';
+}
+
+function barColor(pct) {
+  if (pct < 50) return 'bar-green';
+  if (pct < 80) return 'bar-yellow';
+  return 'bar-red';
+}
+
+function renderGpuCards(gpus) {
+  const container = document.getElementById('gpu-cards');
+  if (!gpus || gpus.length === 0) {
+    container.innerHTML = '<span style="color:#555">No GPU detected</span>';
+    return;
+  }
+  container.innerHTML = gpus.map(g => `
+    <div class="gpu-card">
+      <div class="gpu-name">GPU ${g.index}: ${escapeHtml(g.name)}</div>
+      <div class="gpu-bar-row">
+        <span class="bar-label">GPU</span>
+        <div class="gpu-bar-outer">
+          <div class="gpu-bar-inner ${barColor(g.gpu_util)}" style="width:${g.gpu_util}%"></div>
+          <span class="gpu-bar-text">${g.gpu_util}%</span>
+        </div>
+      </div>
+      <div class="gpu-bar-row">
+        <span class="bar-label">vRAM</span>
+        <div class="gpu-bar-outer">
+          <div class="gpu-bar-inner ${barColor(g.mem_util)}" style="width:${g.mem_util}%"></div>
+          <span class="gpu-bar-text">${g.mem_used} / ${g.mem_total} MiB</span>
+        </div>
+      </div>
+      <div class="gpu-stats">
+        <span>Temp: ${g.temp}C</span>
+        <span>Power: ${g.power_draw}W / ${g.power_limit}W</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function pollGpu() {
+  if (gpuCollapsed) return;
+  try {
+    const res = await fetch('/api/gpu');
+    const data = await res.json();
+    renderGpuCards(data.gpus);
+  } catch (e) { /* silent */ }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
 loadConfig();
 initCharts();
 pollStatus();
+pollGpu();
 setInterval(pollStatus, 3000);
+setInterval(pollGpu, 2000);
 </script>
 </body>
 </html>
