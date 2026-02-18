@@ -185,7 +185,9 @@ def print_diagnostic_stats(
         sq_gt = y_true.double().pow(2)
 
         # 3. Build BC masks from raw features
-        d_mask = Data(**{k: v for k, v in d_raw})
+        # Clone to avoid typing/iteration issues with Data internals while
+        # preserving all graph attributes for mask construction.
+        d_mask = d_raw.clone()
         d_mask = build_bc_masks_airfrans(d_mask)
 
         is_wall = d_mask.is_wall.bool()

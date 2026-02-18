@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${SCRIPT_DIR}"
 
 DATASET_ROOT="Dataset"
-TASK="scarce"
+TASK="full"
 DOWNSAMPLED_DIR="downsampled_graphs_v2"
 EDGES_DIR="prebuilt_edges_v2"
 PYTHON_BIN="python"
