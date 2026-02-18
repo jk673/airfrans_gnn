@@ -1,23 +1,6 @@
 {
   "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/home/elicer/airfrans_gnn"
-      ]
-    },
-    "jupyter": {
-      "command": "/home/elicer/.local/bin/jupyter-mcp-server",
-      "args": [],
-      "env": {
-        "JUPYTER_URL": "http://localhost:8888",
-        "JUPYTER_TOKEN": "BLOCK",
-        "ALLOW_IMG_OUTPUT": "true"
-      }
-    },
-    "context7": {
+"context7": {
       "command": "npx",
       "args": [
         "-y",

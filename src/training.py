@@ -430,10 +430,7 @@ LOSS_SIGNAL_KEYS = (
     "continuity_loss",
     "momentum_loss",
     "bc_loss",
-    "bc_wall_loss",
-    "bc_inlet_loss",
-    "bc_outlet_loss",
-    "bc_farfield_loss",
+    "learning_rate",
 )
 LOSS_SIGNAL_LABELS = {
     "total_loss": "Total Loss",
@@ -441,10 +438,7 @@ LOSS_SIGNAL_LABELS = {
     "continuity_loss": "Continuity Loss",
     "momentum_loss": "Momentum Loss",
     "bc_loss": "Boundary Condition Loss",
-    "bc_wall_loss": "BC Wall Loss",
-    "bc_inlet_loss": "BC Inlet Loss",
-    "bc_outlet_loss": "BC Outlet Loss",
-    "bc_farfield_loss": "BC Farfield Loss",
+    "learning_rate": "Learning Rate",
 }
 
 
@@ -504,27 +498,42 @@ def _save_loss_signal_plots(loss_history: dict) -> None:
 
     for idx, key in enumerate(active_keys):
         ax = axes[idx // n_cols][idx % n_cols]
-        train_mask, train_vals = _finite_series(loss_history["train"][key])
-        val_mask, val_vals = _finite_series(loss_history["val"][key])
-        if np.any(train_mask):
-            ax.plot(
-                epochs[train_mask],
-                train_vals[train_mask],
-                label="train",
-                marker="o",
-                linewidth=1.2,
-            )
-        if np.any(val_mask):
-            ax.plot(
-                epochs[val_mask],
-                val_vals[val_mask],
-                label="val",
-                marker="x",
-                linewidth=1.2,
-            )
+        if key == "learning_rate":
+            # LR is recorded only in train history (single line, no train/val split)
+            lr_mask, lr_vals = _finite_series(loss_history["train"][key])
+            if np.any(lr_mask):
+                ax.plot(
+                    epochs[lr_mask],
+                    lr_vals[lr_mask],
+                    label="lr",
+                    marker="o",
+                    linewidth=1.2,
+                    color="tab:purple",
+                )
+            ax.set_ylabel("LR")
+        else:
+            train_mask, train_vals = _finite_series(loss_history["train"][key])
+            val_mask, val_vals = _finite_series(loss_history["val"][key])
+            if np.any(train_mask):
+                ax.plot(
+                    epochs[train_mask],
+                    train_vals[train_mask],
+                    label="train",
+                    marker="o",
+                    linewidth=1.2,
+                )
+            if np.any(val_mask):
+                ax.plot(
+                    epochs[val_mask],
+                    val_vals[val_mask],
+                    label="val",
+                    marker="x",
+                    linewidth=1.2,
+                )
+            ax.set_ylabel("Loss")
+            ax.set_ylim(0, 1)
         ax.set_title(LOSS_SIGNAL_LABELS.get(key, key))
         ax.set_xlabel("Epoch")
-        ax.set_ylabel("Loss")
         ax.grid(True, alpha=0.25)
         ax.legend()
 
@@ -587,6 +596,7 @@ def train_with_scheduler(model, optim, scheduler, train_loader, val_loader,
         final_val_total = float(val_total)
 
         if is_main:
+            train_logs["learning_rate"] = get_lr(optim) or float("nan")
             _append_loss_history(loss_history, "train", train_logs, epoch + 1)
             _append_loss_history(loss_history, "val", val_logs, epoch + 1)
             _save_loss_signal_plots(loss_history)

@@ -673,13 +673,13 @@ class NavierStokesPhysicsLoss(nn.Module):
             v2 = v * v
             uv = u * v
             du2dx, _ = weighted_gradient(u2, edge_index, edge_attr.to(device), num_nodes,
-                                         pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode)
+                                         pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
             _, duvdy = weighted_gradient(uv, edge_index, edge_attr.to(device), num_nodes,
-                                         pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode)
+                                         pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
             duvdx, _ = weighted_gradient(uv, edge_index, edge_attr.to(device), num_nodes,
-                                         pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode)
+                                         pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
             _, dv2dy = weighted_gradient(v2, edge_index, edge_attr.to(device), num_nodes,
-                                         pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode)
+                                         pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
             conv_u = 0.5 * (conv_u_std + (du2dx + duvdy))
             conv_v = 0.5 * (conv_v_std + (duvdx + dv2dy))
         else:
@@ -692,7 +692,7 @@ class NavierStokesPhysicsLoss(nn.Module):
         lap_v = weighted_laplacian(v, edge_index, edge_attr.to(device), num_nodes,
                                    pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
         dnutdx, dnutdy = weighted_gradient(nu_t, edge_index, edge_attr.to(device), num_nodes,
-                                           pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode)
+                                           pos=pos_scaled, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
 
         visc_u = (mol_coeff + nu_t) * lap_u + dnutdx * dudx + dnutdy * dudy
         visc_v = (mol_coeff + nu_t) * lap_v + dnutdx * dvdx + dnutdy * dvdy
