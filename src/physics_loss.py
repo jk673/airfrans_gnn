@@ -148,6 +148,8 @@ def conservative_divergence(
     dx, dy, length = _extract_dxdy_length(edge_index, edge_attr, pos, prefer_dxdy, eps)
     if Lref != 1.0:  # make geometry dimensionless to match u*
         _s = 1.0 / max(Lref, 1e-12)
+        dx = dx * _s
+        dy = dy * _s
         length = length * _s
         if node_area is not None:
             node_area = node_area.to(velocity.device, velocity.dtype) * (_s * _s)
