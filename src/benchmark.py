@@ -40,7 +40,7 @@ FLOW_GLIDE_METRIC_HEADERS = [
     "\u03c1_D \u2191",
     "\u03c1_L \u2191",
 ]
-FLOW_GLIDE_REFERENCE_PATH = PROJECT_ROOT / "benchmark/benchmark_reference.json"
+FLOW_GLIDE_REFERENCE_PATH = PROJECT_ROOT / "docs/benchmark/benchmark_reference.json"
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +195,7 @@ class ExperimentTracker:
         self.project_name = project_name
 
         if reference_path is None:
-            reference_path = Path("benchmark/benchmark_reference.json")
+            reference_path = Path("docs/benchmark/benchmark_reference.json")
         self.reference = self._load_reference(reference_path)
 
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -440,7 +440,7 @@ def run_benchmark_and_log_experiment(
     tracker = tracker or ExperimentTracker(
         log_dir=PROJECT_ROOT / "experiments",
         project_name="AirfRANS 2D Airfoil - GNN Surrogate",
-        reference_path=PROJECT_ROOT / "benchmark/benchmark_reference.json",
+        reference_path=PROJECT_ROOT / "docs/benchmark/benchmark_reference.json",
     )
 
     try:

@@ -58,8 +58,8 @@ processed_edges/
 checkpoints/
 
 # Benchmark results (generated, not tracked)
-benchmark/results.json
-benchmark/results.md
+docs/benchmark/results.json
+docs/benchmark/results.md
 
 # Experiment outputs (generated, not tracked)
 experiments/results/

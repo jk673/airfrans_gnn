@@ -8,7 +8,7 @@ AirfRANS GNN is a physics-informed GNN training pipeline for 2D airfoil CFD surr
 - `scripts/`: production entry points (`train.py`, `train_multiscale.py`, `eval_cp.py`, `optuna_hpo.py`, `run_experiment.py`, `score_benchmark.py`).
 - `preprocessing/`: dataset conversion/downsampling/edge construction.
 - `tests/`: pytest targets for loss correctness and batching behavior.
-- `docs/` and `benchmark/`: experiment docs, scoring rules, FLOW-GLIDE reference metrics.
+- `docs/` and `docs/benchmark/`: experiment docs, scoring rules, FLOW-GLIDE reference metrics.
 - `Dataset/`, `downsampled_graphs/`, `prebuilt_edges_v2/`: local data artifacts.
 - `checkpoint/`: model snapshots produced by experiments.
 

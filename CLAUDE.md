@@ -121,7 +121,7 @@ Physics weights ramp up over training via linear or cosine curriculum schedule. 
 | `src/visualization.py` | Prediction vs. ground-truth plotting |
 | `src/edge_construction.py` | Radius-graph edge building, degree floor enforcement, edge features, QA reports |
 | `preprocessing/build_edges_from_downsampled.py` | Edge construction wrapper (CLI) |
-| `benchmark/benchmark_reference.json` | FLOW-GLIDE 논문의 10개 baseline 메트릭 |
+| `docs/benchmark/benchmark_reference.json` | FLOW-GLIDE 논문의 10개 baseline 메트릭 |
 | `scripts/score_benchmark.py` | CLI 벤치마크 스코어링 (6개 메트릭 계산 + 비교 테이블) |
 
 ### Edge Attribute Schema
@@ -179,13 +179,13 @@ python scripts/score_benchmark.py \
 
 ### 출력 파일
 
-- `benchmark/results.json` — 메트릭 값 + 메타데이터
-- `benchmark/results.md` — FLOW-GLIDE 비교 마크다운 테이블
+- `docs/benchmark/results.json` — 메트릭 값 + 메타데이터
+- `docs/benchmark/results.md` — FLOW-GLIDE 비교 마크다운 테이블
 
 ### 참고
 
-- `benchmark/benchmark_reference.json` — FLOW-GLIDE 논문의 10개 baseline 메트릭
-- `benchmark/scoring_guide.md` — 상세 워크플로우 가이드
+- `docs/benchmark/benchmark_reference.json` — FLOW-GLIDE 논문의 10개 baseline 메트릭
+- `docs/benchmark/scoring_guide.md` — 상세 워크플로우 가이드
 - `--hidden`/`--layers`는 체크포인트 훈련 시 사용한 값과 반드시 일치해야 함
 
 ## Notebook 수정 규칙

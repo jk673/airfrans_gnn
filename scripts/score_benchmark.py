@@ -353,9 +353,9 @@ def parse_args():
     p.add_argument("--layers", type=int, default=14)
 
     # Output
-    p.add_argument("--output", type=str, default="benchmark/results.json",
+    p.add_argument("--output", type=str, default="docs/benchmark/results.json",
                    help="Path for JSON results")
-    p.add_argument("--output-md", type=str, default="benchmark/results.md",
+    p.add_argument("--output-md", type=str, default="docs/benchmark/results.md",
                    help="Path for Markdown comparison table")
     p.add_argument("--reference", type=str, default=None,
                    help="Path to benchmark_reference.json (auto-detected)")

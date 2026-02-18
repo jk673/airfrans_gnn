@@ -106,11 +106,12 @@ cat benchmark_results.md
 ```
 airfrans_gnn/
 ├── CLAUDE.md                    # ← 에이전트가 읽는 주 문서 (Benchmark Scoring 섹션)
-├── benchmark/
-│   ├── benchmark_reference.json # ← FLOW-GLIDE 비교 테이블 (10개 모델)
-│   ├── scoring_guide.md         # ← 이 파일 (상세 워크플로우 가이드)
-│   ├── results.json             # ← 스코어링 결과 (실행 후 생성)
-│   └── results.md               # ← 마크다운 비교 테이블 (실행 후 생성)
+├── docs/
+│   └── benchmark/
+│       ├── benchmark_reference.json # ← FLOW-GLIDE 비교 테이블 (10개 모델)
+│       ├── scoring_guide.md         # ← 이 파일 (상세 워크플로우 가이드)
+│       ├── results.json             # ← 스코어링 결과 (실행 후 생성)
+│       └── results.md               # ← 마크다운 비교 테이블 (실행 후 생성)
 ├── scripts/
 │   └── score_benchmark.py       # ← CLI 벤치마크 스코어링
 └── src/
