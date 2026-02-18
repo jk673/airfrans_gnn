@@ -10,10 +10,11 @@ AirfRANS GNN is a physics-informed Graph Neural Network framework for aerodynami
 
 ```bash
 # Python 3.11 required
-uv sync   # uses pyproject.toml with PyTorch CUDA 12.4 index and prebuilt PyG wheels
+uv sync   # uses pyproject.toml with PyTorch CUDA 12.8 index and prebuilt PyG wheels
 ```
 
-Key dependencies: PyTorch, PyTorch Geometric, torch-scatter, torch-sparse, wandb, scipy.
+Key dependencies: PyTorch 2.8.0+cu128, PyTorch Geometric, torch-scatter, torch-sparse, wandb, scipy.
+RTX 50 시리즈 (Blackwell, sm_120) 지원을 위해 CUDA 12.8 사용.
 
 ## 문서 참조 규칙 (Context7)
 
@@ -42,12 +43,22 @@ CLI scripts (preferred):
 - `scripts/eval_cp.py` — Evaluate Cp relative L2 from a checkpoint
 - `scripts/reset_experiment_docs.py` — Reset experiment tracking and Optuna docs
 
+Integrated dashboard:
+- `python dashboard/app.py` — Browser-based training dashboard (config, live charts, experiments, GPU monitor)
+
 Jupyter notebooks (interactive exploration):
 - `notebooks/00_preprocessing.ipynb` — Data preprocessing and inspection
 - `notebooks/01_trainer.ipynb` — Main training pipeline
 - `notebooks/02_optuna_training.ipynb` — Hyperparameter optimization with Optuna
 - `notebooks/02_trainer_multi_scale.ipynb` — Multi-scale model variant
 - `notebooks/03_eval_cp_relative_l2.ipynb` — Surface pressure evaluation
+
+### Dashboard
+
+```bash
+python dashboard/app.py              # http://localhost:5000
+python dashboard/app.py --port 8080  # custom port
+```
 
 ### Tests
 
@@ -62,12 +73,12 @@ pytest tests/test_physics_loss_batching.py::test_physics_loss_with_increased_bat
 
 Raw AirfRANS data → `preprocessing/downsample_airfrans_v2.py` (adaptive voxel sampling, preserves surface nodes) → `preprocessing/edges_from_downsampled_v2.py` (radius-graph edges with KNN backup) → Training via `scripts/train.py` or notebooks (normalize with `src/data.py`, train with `src/training.py` + physics loss, evaluate)
 
-### Model: `EnhancedCFDModelWithGlobalContext` (defined in `src/global_context_processor.py`)
+### Model: `EnhancedCFDModelWithGlobalContext` (defined in `src/model.py`)
 
 - **Input**: 7D node features (freestream velocity, wall distance, wall normals, position) + 10D edge features (after enrichment)
 - **Output**: 4D predictions (u, v, pressure, nu_t)
 - **Architecture**: Node/Edge encoders → 14 message-passing layers → optional `GlobalContextProcessor` (attention-based) → output decoder
-- Configuration lives in `SmokeCfg` dataclass in `src/config.py`
+- Configuration lives in `Config` dataclass in `scripts/main.py` or CLI args in `scripts/train.py`
 
 ### Physics-Informed Loss (`src/physics_loss.py`)
 
@@ -83,26 +94,23 @@ Physics weights ramp up over training via linear or cosine curriculum schedule. 
 
 | File | Purpose |
 |------|---------|
-| `src/config.py` | `SmokeCfg` dataclass, config file loading, CLI parsing (`parse_args`, `create_config_from_args`) |
 | `src/data.py` | `StandardScaler`, `NormalizedDataset`, `DataBundle`, `load_and_prepare_data`, `collate_pyg` |
+| `src/model.py` | `EnhancedCFDModelWithGlobalContext` — attention-based global context model |
 | `src/training.py` | `train_epoch`, `run_epoch`, `compute_loss_with_physics`, `train_with_scheduler`, LR scheduler, wandb init |
-| `src/preprocessing.py` | Physics preprocessing (BC masks, node areas, wall normals, edge geometry) |
-| `src/physics_loss.py` | `NavierStokesPhysicsLoss` — RANS physics loss with curriculum scheduling |
-| `src/turbulent_physics_loss.py` | `EnhancedPhysicsLoss` — turbulence model extensions |
-| `src/global_context_processor.py` | `EnhancedCFDModelWithGlobalContext` — attention-based global context model |
-| `src/multigraph_convolution.py` | Multi-scale and dilated graph convolutions |
-| `src/force_coefficients.py` | Lift/drag coefficient integration from surface pressure |
-| `src/utils.py` | Graph utilities (`prep_graph`, `validate_edges`, `_valid_edges`, `_prep_graph_for_norm`) |
-| `src/benchmark.py` | `ExperimentTracker`, FLOW-GLIDE comparison table generation |
-| `src/diagnostics.py` | Diagnostic plots and statistics (`plot_inlet_bc_velocity`, `print_diagnostic_stats`) |
-| `src/metrics.py` | Surface mask detection, force coefficient computation |
-| `src/prediction.py` | Model inference helpers |
-| `src/visualization.py` | Prediction vs. ground-truth plotting |
-| `src/edge_construction.py` | Radius-graph edge building, degree floor enforcement, edge features, QA reports |
-| `src/ddp_utils.py` | Distributed Data Parallel helpers (`setup_ddp`, `_is_ddp`, `_unwrap_model`, etc.) |
+| `src/physics_loss.py` | `NavierStokesPhysicsLoss` — RANS physics loss with curriculum scheduling (continuity/momentum/bc start→target weight ramping) |
+| `src/pipeline.py` | Declarative training API: `load_airfrans_data`, `convert_to_pyg`, `build_model`, `build_physics_loss`, `Trainer` (with `on_epoch_end` callback), `LiveDashboard` |
+| `src/benchmark.py` | `ExperimentTracker`, FLOW-GLIDE comparison table, `score_test_set`, `run_benchmark_and_log_experiment` |
 | `preprocessing/edges_from_downsampled_v2.py` | Edge construction wrapper (CLI) |
 | `docs/benchmark/benchmark_reference.json` | FLOW-GLIDE 논문의 10개 baseline 메트릭 |
-| `scripts/score_benchmark.py` | CLI 벤치마크 스코어링 (6개 메트릭 계산 + 비교 테이블) |
+
+### Dashboard (`dashboard/`)
+
+| File | Purpose |
+|------|---------|
+| `dashboard/app.py` | Flask server + API routes (`/api/config`, `/api/start`, `/api/stop`, `/api/status`, `/api/gpu`, `/api/experiments`) |
+| `dashboard/runner.py` | `TrainingSession` — background thread로 학습 실행, thread-safe 상태 관리 |
+| `dashboard/templates/index.html` | SPA frontend (Config/Training/Experiments 3탭 + GPU 모니터 플로팅 패널) |
+| `docs/dashboard/README.md` | Dashboard 설계 문서 |
 
 ### Edge Feature Pipeline
 

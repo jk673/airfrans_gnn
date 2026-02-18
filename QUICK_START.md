@@ -35,11 +35,11 @@ source .venv/bin/activate
 
 | 패키지 | 버전 | 용도 |
 |--------|------|------|
-| torch | 2.4.0+cu124 | 딥러닝 프레임워크 |
+| torch | 2.8.0+cu128 | 딥러닝 프레임워크 |
 | torch-geometric | 2.7.0 | 그래프 뉴럴 네트워크 |
-| torch-scatter | 2.1.2+cu124 | scatter 연산 (물리 손실함수) |
-| torch-sparse | 0.6.18+cu124 | sparse 텐서 연산 |
-| torch-cluster | 1.6.3+cu124 | 그래프 클러스터링 |
+| torch-scatter | 2.1.2+cu128 | scatter 연산 (물리 손실함수) |
+| torch-sparse | 0.6.18+cu128 | sparse 텐서 연산 |
+| torch-cluster | 1.6.3+cu128 | 그래프 클러스터링 |
 | numpy | - | 수치 연산 |
 | scipy | - | 과학 계산 |
 | matplotlib | - | 시각화 |
@@ -47,7 +47,7 @@ source .venv/bin/activate
 | wandb | - | 실험 추적 |
 | python-dotenv | - | 환경 변수 로드 |
 
-> **참고**: NVIDIA GPU + CUDA 12.4 환경을 권장합니다. CPU만 사용할 경우 `pyproject.toml`의 `extra-index-url`을 CPU 버전으로 변경하세요.
+> **참고**: NVIDIA GPU + CUDA 12.8 환경을 권장합니다. RTX 50 시리즈(Blackwell, sm_120) 지원을 위해 PyTorch 2.8+cu128을 사용합니다.
 
 ## 🚀 빠른 시작
 
@@ -82,7 +82,28 @@ chmod +x setup_proc_data.sh
 ./setup_proc_data.sh --task all
 ```
 
-### 2. 기본 학습 실행
+### 2. 통합 대시보드 (권장)
+
+브라우저에서 학습 설정, 실행, 실시간 모니터링, 실험 기록 조회를 한번에 처리할 수 있습니다.
+
+```bash
+python dashboard/app.py
+# → http://localhost:5000
+```
+
+**3개 탭:**
+- **Config** — 모든 하이퍼파라미터 설정 (data, model, physics, optimizer, scheduler, training) + Start/Stop 버튼
+- **Training** — 실시간 학습 차트 6개 (Total Loss, MSE, Continuity, Momentum, BC, LR) + 상태바
+- **Experiments** — FLOW-GLIDE 비교 테이블 (baselines + 내 실험), 행 클릭 시 상세 정보
+
+**GPU Monitor** — 우하단 플로팅 패널로 GPU 사용률/vRAM/온도/전력을 2초 간격 실시간 모니터링
+
+```bash
+# 커스텀 포트
+python dashboard/app.py --port 8080
+```
+
+### 3. 기본 학습 실행 (CLI)
 
 ```bash
 # 기본 설정으로 학습 시작
@@ -97,7 +118,7 @@ python scripts/train.py \
     --wandb-name my-experiment
 ```
 
-### 3. DDP 분산 학습 (Multi-GPU)
+### 4. DDP 분산 학습 (Multi-GPU)
 
 `train.py`는 `torchrun`으로 실행하면 자동으로 DDP 모드가 활성화됩니다.
 별도의 플래그 없이 `RANK`, `WORLD_SIZE`, `LOCAL_RANK` 환경변수가 감지되면 분산 학습이 시작됩니다.
@@ -130,7 +151,7 @@ CUDA_VISIBLE_DEVICES=0,2 torchrun --nproc_per_node=2 scripts/train.py \
 - 체크포인트 저장, wandb 로깅, 평가는 rank 0 프로세스에서만 수행됩니다
 - NCCL 백엔드를 사용하므로 NVIDIA GPU + CUDA 환경이 필수입니다
 
-### 4. GPU 모니터링 (`gpu_monitor.sh`)
+### 5. GPU 모니터링 (`gpu_monitor.sh`)
 
 학습 중 GPU 사용률/메모리/온도/전력을 빠르게 확인할 수 있습니다.
 
@@ -145,7 +166,7 @@ CUDA_VISIBLE_DEVICES=0,2 torchrun --nproc_per_node=2 scripts/train.py \
 ./gpu_monitor.sh --help
 ```
 
-### 5. Multi-Scale 모델 학습
+### 6. Multi-Scale 모델 학습
 
 ```bash
 python scripts/train_multiscale.py \
@@ -155,7 +176,7 @@ python scripts/train_multiscale.py \
     --num-multiscale-layers 4
 ```
 
-### 6. 하이퍼파라미터 최적화
+### 7. 하이퍼파라미터 최적화
 
 ```bash
 python scripts/optuna_hpo.py \
@@ -165,7 +186,7 @@ python scripts/optuna_hpo.py \
     --viz-dir visualizations
 ```
 
-### 7. 실험 문서 리셋
+### 8. 실험 문서 리셋
 
 `scripts/reset_experiment_docs.py`를 이용해 실험 로그(`experiments/EXPERIMENT_LOG.md`)와
 `docs/optuna/EXAMPLES_OPTUNA.md`를 초기 상태로 재생성할 수 있습니다.
@@ -185,7 +206,7 @@ python scripts/reset_experiment_docs.py --skip-optuna-doc
 python scripts/reset_experiment_docs.py --skip-experiment-log
 ```
 
-### 8. 모델 평가
+### 9. 모델 평가
 
 ```bash
 python scripts/eval_cp.py \
