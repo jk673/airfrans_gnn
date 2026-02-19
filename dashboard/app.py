@@ -17,7 +17,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from flask import Flask, jsonify, request, render_template
 
-from dashboard.runner import TrainingSession
+from dashboard.runner import TrainingSession, build_lr_scheduler
 from src.benchmark import (
     FLOW_GLIDE_METRIC_KEYS,
     _load_flow_glide_baselines,
@@ -68,7 +68,19 @@ DEFAULT_CONFIG = {
         "weight_decay": {"value": 1e-4, "type": "float"},
     },
     "scheduler": {
-        "scheduler_T_max": {"value": 100, "type": "int"},
+        "scheduler_type": {
+            "value": "CosineAnnealingLR", "type": "select",
+            "options": ["Constant", "CosineAnnealingLR", "StepLR", "ReduceLROnPlateau", "CosineAnnealingWarmRestarts"],
+        },
+        "scheduler_T_max": {"value": 100, "type": "int", "for": ["CosineAnnealingLR"]},
+        "scheduler_eta_min": {"value": 0.0, "type": "float", "for": ["CosineAnnealingLR", "CosineAnnealingWarmRestarts"]},
+        "scheduler_step_size": {"value": 10, "type": "int", "for": ["StepLR"]},
+        "scheduler_gamma": {"value": 0.1, "type": "float", "for": ["StepLR"]},
+        "scheduler_factor": {"value": 0.5, "type": "float", "for": ["ReduceLROnPlateau"]},
+        "scheduler_patience": {"value": 10, "type": "int", "for": ["ReduceLROnPlateau"]},
+        "scheduler_min_lr": {"value": 1e-6, "type": "float", "for": ["ReduceLROnPlateau"]},
+        "scheduler_T_0": {"value": 10, "type": "int", "for": ["CosineAnnealingWarmRestarts"]},
+        "scheduler_T_mult": {"value": 1, "type": "int", "for": ["CosineAnnealingWarmRestarts"]},
     },
     "training": {
         "num_epochs": {"value": 20, "type": "int"},
@@ -166,6 +178,30 @@ def list_experiments():
         experiments.append(row)
 
     return jsonify({"baselines": baselines, "experiments": experiments})
+
+
+@app.route("/api/lr-preview", methods=["POST"])
+def lr_preview():
+    data = request.get_json(force=True)
+    import torch
+    base_lr = data.get("base_lr", 1e-3)
+    num_epochs = data.get("num_epochs", 100)
+
+    dummy = torch.nn.Linear(1, 1)
+    optimizer = torch.optim.SGD(dummy.parameters(), lr=base_lr)
+    scheduler = build_lr_scheduler(optimizer, data)
+
+    epochs = list(range(num_epochs))
+    lrs = []
+    for _ in epochs:
+        lrs.append(optimizer.param_groups[0]["lr"])
+        if scheduler is not None:
+            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                scheduler.step(999.0)  # worst-case: metric never improves
+            else:
+                scheduler.step()
+
+    return jsonify({"epochs": epochs, "lr": lrs})
 
 
 @app.route("/api/gpu")

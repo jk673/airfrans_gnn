@@ -53,3 +53,54 @@ class TestBuildLrScheduler:
     def test_unknown_type_raises(self, dummy_optimizer):
         with pytest.raises(ValueError, match="Unknown scheduler"):
             build_lr_scheduler(dummy_optimizer, {"scheduler_type": "FooBar"})
+
+
+import json
+
+from dashboard.app import app as flask_app
+
+
+@pytest.fixture
+def client():
+    flask_app.config["TESTING"] = True
+    with flask_app.test_client() as c:
+        yield c
+
+
+class TestLrPreviewEndpoint:
+    def test_cosine_preview(self, client):
+        resp = client.post("/api/lr-preview", data=json.dumps({
+            "scheduler_type": "CosineAnnealingLR",
+            "scheduler_T_max": 20,
+            "scheduler_eta_min": 0.0,
+            "base_lr": 0.001,
+            "num_epochs": 20,
+        }), content_type="application/json")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data["epochs"]) == 20
+        assert len(data["lr"]) == 20
+        assert data["lr"][0] == pytest.approx(0.001)
+        assert data["lr"][-1] < data["lr"][0]  # LR decreased
+
+    def test_constant_preview(self, client):
+        resp = client.post("/api/lr-preview", data=json.dumps({
+            "scheduler_type": "Constant",
+            "base_lr": 0.01,
+            "num_epochs": 10,
+        }), content_type="application/json")
+        data = resp.get_json()
+        assert all(lr == pytest.approx(0.01) for lr in data["lr"])
+
+    def test_plateau_preview_worst_case(self, client):
+        resp = client.post("/api/lr-preview", data=json.dumps({
+            "scheduler_type": "ReduceLROnPlateau",
+            "scheduler_factor": 0.5,
+            "scheduler_patience": 3,
+            "scheduler_min_lr": 1e-6,
+            "base_lr": 0.01,
+            "num_epochs": 20,
+        }), content_type="application/json")
+        data = resp.get_json()
+        # LR should have decreased after patience epochs
+        assert data["lr"][-1] < data["lr"][0]
