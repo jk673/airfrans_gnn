@@ -103,7 +103,7 @@ criterion = build_physics_loss({
 }, steps_per_epoch=len(bundle.train_loader))
 
 # 4. Optimizer & scheduler
-optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
+optimizer = torch.optim.adamw.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.scheduler_T_max)
 
 # 5. Train
