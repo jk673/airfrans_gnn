@@ -185,7 +185,8 @@
     background: #a855f7; color: #fff; padding: 6px 16px; border: none;
     border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.82em;
   }
-  .btn-preview:hover { background: #9333ea; }
+  .btn-preview:hover:not(:disabled) { background: #9333ea; }
+  .btn-preview:disabled { opacity: 0.5; cursor: not-allowed; }
   .sched-chart-wrap {
     margin-top: 10px; display: none; background: #0f1a2e;
     border-radius: 6px; padding: 10px;
@@ -197,6 +198,16 @@
   .sched-plateau-note {
     color: #888; font-size: 0.72em; text-align: center; margin-top: 4px;
   }
+  .sched-summary {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+    padding: 6px 8px; background: #162032; border-radius: 4px;
+  }
+  .sched-summary-item {
+    font-size: 0.72em; color: #a8a8b3; white-space: nowrap;
+  }
+  .sched-summary-item strong { color: #e2e2f0; }
+  input[type="number"]:invalid { outline: 1px solid #e74c3c; }
+  input.field-invalid { outline: 1px solid #e74c3c !important; }
 
   @media (max-width:900px) {
     .config-grid { grid-template-columns:1fr; }
@@ -224,6 +235,7 @@
     <button class="btn btn-start" id="btn-start" onclick="startTraining()">Start Training</button>
     <button class="btn btn-stop" id="btn-stop" onclick="stopTraining()" disabled>Stop</button>
   </div>
+  <p id="start-error" style="display:none;color:#e74c3c;font-size:0.82em;margin:6px 0 0 0;"></p>
 </div>
 
 <!-- ═══════════════════════ TRAINING TAB ═══════════════════════ -->
@@ -345,13 +357,13 @@ function renderConfigForm(schema) {
       const previewArea = document.createElement('div');
       previewArea.className = 'sched-preview-area';
       previewArea.innerHTML = `
-        <button class="btn-preview" onclick="previewLrSchedule()">Preview LR Schedule</button>
+        <button class="btn-preview" id="btn-lr-preview" onclick="previewLrSchedule()">Preview LR Schedule</button>
+        <p class="sched-plateau-note" id="sched-preview-error" style="display:none;color:#e74c3c;"></p>
         <div class="sched-chart-wrap" id="sched-chart-wrap">
           <h4>LR Schedule Preview</h4>
           <canvas id="c-lr-preview"></canvas>
-          <p class="sched-plateau-note" id="sched-plateau-note" style="display:none">
-            * ReduceLROnPlateau: showing worst-case (metric never improves)
-          </p>
+          <div id="sched-summary" class="sched-summary" style="display:none"></div>
+          <p class="sched-plateau-note" id="sched-preview-note" style="display:none"></p>
         </div>
       `;
       div.appendChild(previewArea);
@@ -397,11 +409,20 @@ function makeFieldRow(id, label, spec) {
   } else if (spec.type === 'text') {
     input = document.createElement('textarea');
     input.value = spec.value;
+  } else if (spec.type === 'int' || spec.type === 'float') {
+    input = document.createElement('input');
+    input.type = 'number';
+    input.value = spec.value;
+    if (spec.type === 'float') input.step = 'any';
+    if (spec.min !== undefined) input.min = spec.min;
+    if (spec.max !== undefined) input.max = spec.max;
+    if (spec.help) input.title = spec.help;
   } else {
     input = document.createElement('input');
     input.type = 'text';
     input.value = spec.value;
   }
+  if (spec.help && input.tagName !== 'INPUT') input.title = spec.help;
   input.id = 'cfg-' + id;
   input.dataset.path = id;
   input.dataset.dtype = spec.type;
@@ -437,9 +458,69 @@ function collectConfig() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// CLIENT-SIDE VALIDATION
+// ═══════════════════════════════════════════════════════════════
+function validateConfigBeforeStart() {
+  const errors = [];
+
+  // Clear previous invalid markers
+  document.querySelectorAll('.field-invalid').forEach(el => el.classList.remove('field-invalid'));
+
+  // Validate all visible number inputs (skip hidden-param rows)
+  document.querySelectorAll('[data-dtype="int"], [data-dtype="float"]').forEach(input => {
+    // Skip inputs inside hidden rows
+    const row = input.closest('.field-row');
+    if (row && row.classList.contains('hidden-param')) return;
+
+    const val = input.value.trim();
+    const label = input.closest('.field-row')?.querySelector('label')?.textContent || input.id;
+
+    if (val === '' || val === '-' || isNaN(Number(val))) {
+      errors.push(`"${label}" must be a valid number`);
+      input.classList.add('field-invalid');
+      return;
+    }
+    const num = Number(val);
+    if (input.min !== '' && num < Number(input.min)) {
+      errors.push(`"${label}" must be ≥ ${input.min} (got ${num})`);
+      input.classList.add('field-invalid');
+    }
+    if (input.max !== '' && num > Number(input.max)) {
+      errors.push(`"${label}" must be ≤ ${input.max} (got ${num})`);
+      input.classList.add('field-invalid');
+    }
+  });
+
+  // Validate essential non-scheduler fields
+  const lrEl = document.getElementById('cfg-optimizer.lr');
+  if (lrEl && (isNaN(parseFloat(lrEl.value)) || parseFloat(lrEl.value) <= 0)) {
+    errors.push('"lr" must be a positive number');
+    lrEl.classList.add('field-invalid');
+  }
+  const epochEl = document.getElementById('cfg-training.num_epochs');
+  if (epochEl && (isNaN(parseInt(epochEl.value, 10)) || parseInt(epochEl.value, 10) < 1)) {
+    errors.push('"num_epochs" must be ≥ 1');
+    epochEl.classList.add('field-invalid');
+  }
+
+  return errors;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // START / STOP
 // ═══════════════════════════════════════════════════════════════
 async function startTraining() {
+  const errEl = document.getElementById('start-error');
+
+  // Client-side validation gate
+  const errors = validateConfigBeforeStart();
+  if (errors.length > 0) {
+    errEl.textContent = '⚠ ' + errors.join(' · ');
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
   const cfg = collectConfig();
   const btnStart = document.getElementById('btn-start');
   const btnStop = document.getElementById('btn-stop');
@@ -456,11 +537,13 @@ async function startTraining() {
       btnStop.disabled = false;
       switchTab('training');
     } else {
-      alert(data.message || 'Failed to start');
+      errEl.textContent = '⚠ ' + (data.message || 'Failed to start');
+      errEl.style.display = 'block';
       btnStart.disabled = false;
     }
   } catch (e) {
-    alert('Error: ' + e.message);
+    errEl.textContent = '⚠ Error: ' + e.message;
+    errEl.style.display = 'block';
     btnStart.disabled = false;
   }
 }
@@ -775,13 +858,21 @@ function updateSchedulerParams() {
   if (!typeEl) return;
   const selected = typeEl.value;
   document.querySelectorAll('.sched-params .field-row').forEach(row => {
-    const forScheds = JSON.parse(row.dataset.forScheds || '[]');
-    if (forScheds.length === 0 || forScheds.includes(selected)) {
-      row.classList.remove('hidden-param');
-    } else {
-      row.classList.add('hidden-param');
+    let forScheds = [];
+    try { forScheds = JSON.parse(row.dataset.forScheds || '[]'); } catch (_) {}
+    const visible = forScheds.length === 0 || forScheds.includes(selected);
+    row.classList.toggle('hidden-param', !visible);
+    // Clear invalid markers on newly-hidden rows
+    if (!visible) {
+      row.querySelectorAll('.field-invalid').forEach(el => el.classList.remove('field-invalid'));
     }
   });
+  // Clear the start-error whenever the scheduler type changes
+  const errEl = document.getElementById('start-error');
+  if (errEl) { errEl.style.display = 'none'; }
+  // Collapse the preview chart since it may no longer match the new type
+  const wrap = document.getElementById('sched-chart-wrap');
+  if (wrap) wrap.classList.remove('visible');
 }
 
 let lrPreviewChart = null;
@@ -800,6 +891,12 @@ async function previewLrSchedule() {
     }
   }
 
+  const btn = document.getElementById('btn-lr-preview');
+  const errEl = document.getElementById('sched-preview-error');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  errEl.style.display = 'none';
+
   try {
     const res = await fetch('/api/lr-preview', {
       method: 'POST',
@@ -807,18 +904,60 @@ async function previewLrSchedule() {
       body: JSON.stringify(payload),
     });
     const data = await res.json();
-    renderLrPreview(data, payload.scheduler_type);
+    if (!res.ok) {
+      errEl.textContent = '⚠ ' + (data.error || 'Preview failed');
+      errEl.style.display = 'block';
+      return;
+    }
+    renderLrPreview(data);
   } catch (e) {
-    alert('Preview failed: ' + e.message);
+    errEl.textContent = '⚠ Preview failed: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Preview LR Schedule';
   }
 }
 
-function renderLrPreview(data, schedType) {
+function renderLrPreview(data) {
+  const meta = data.metadata || {};
   const wrap = document.getElementById('sched-chart-wrap');
   wrap.classList.add('visible');
 
-  const note = document.getElementById('sched-plateau-note');
-  note.style.display = schedType === 'ReduceLROnPlateau' ? 'block' : 'none';
+  const note = document.getElementById('sched-preview-note');
+  const notes = [];
+  if (meta.metric_mode === 'flat_worst_case') {
+    notes.push('ReduceLROnPlateau: showing worst-case (metric never improves)');
+  }
+  if ((data.metadata?.resolved?.scheduler_warmup_steps || 0) > 0) {
+    notes.push(`LinearLR warmup for ${data.metadata.resolved.scheduler_warmup_steps} epochs`);
+  }
+  if (notes.length > 0) {
+    note.textContent = '* ' + notes.join(' · ');
+    note.style.display = 'block';
+  } else {
+    note.style.display = 'none';
+  }
+
+  // Summary card
+  const summary = document.getElementById('sched-summary');
+  if (summary && data.lr && data.lr.length > 0) {
+    const fmt = v => v < 0.001 ? v.toExponential(2) : v.toPrecision(4);
+    const warmupSteps = meta.resolved?.scheduler_warmup_steps || 0;
+    const items = [
+      ['Scheduler', meta.scheduler_type || '—'],
+      ['Initial LR', fmt(data.lr[0])],
+      ['Final LR', fmt(data.lr[data.lr.length - 1])],
+      ['Min LR', fmt(meta.min_lr ?? Math.min(...data.lr))],
+      ['Max LR', fmt(meta.max_lr ?? Math.max(...data.lr))],
+      ['Epochs', data.epochs.length],
+    ];
+    if (warmupSteps > 0) items.push(['Warmup', `${warmupSteps} ep`]);
+    summary.innerHTML = items
+      .map(([k, v]) => `<span class="sched-summary-item">${k}: <strong>${v}</strong></span>`)
+      .join('');
+    summary.style.display = 'flex';
+  }
 
   if (lrPreviewChart) {
     lrPreviewChart.destroy();

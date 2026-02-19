@@ -17,7 +17,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from flask import Flask, jsonify, request, render_template
 
-from dashboard.runner import TrainingSession, build_lr_scheduler
+from dashboard.runner import (
+    TrainingSession, build_lr_scheduler, validate_scheduler_config,
+    simulate_lr_schedule, flatten_scheduler_config,
+)
 from src.benchmark import (
     FLOW_GLIDE_METRIC_KEYS,
     _load_flow_glide_baselines,
@@ -70,17 +73,81 @@ DEFAULT_CONFIG = {
     "scheduler": {
         "scheduler_type": {
             "value": "CosineAnnealingLR", "type": "select",
-            "options": ["Constant", "CosineAnnealingLR", "StepLR", "ReduceLROnPlateau", "CosineAnnealingWarmRestarts"],
+            "options": [
+                "Constant", "CosineAnnealingLR", "StepLR",
+                "ReduceLROnPlateau", "CosineAnnealingWarmRestarts",
+                "MultiStepLR", "ExponentialLR",
+            ],
         },
-        "scheduler_T_max": {"value": 100, "type": "int", "for": ["CosineAnnealingLR"]},
-        "scheduler_eta_min": {"value": 0.0, "type": "float", "for": ["CosineAnnealingLR", "CosineAnnealingWarmRestarts"]},
-        "scheduler_step_size": {"value": 10, "type": "int", "for": ["StepLR"]},
-        "scheduler_gamma": {"value": 0.1, "type": "float", "for": ["StepLR"]},
-        "scheduler_factor": {"value": 0.5, "type": "float", "for": ["ReduceLROnPlateau"]},
-        "scheduler_patience": {"value": 10, "type": "int", "for": ["ReduceLROnPlateau"]},
-        "scheduler_min_lr": {"value": 1e-6, "type": "float", "for": ["ReduceLROnPlateau"]},
-        "scheduler_T_0": {"value": 10, "type": "int", "for": ["CosineAnnealingWarmRestarts"]},
-        "scheduler_T_mult": {"value": 1, "type": "int", "for": ["CosineAnnealingWarmRestarts"]},
+        "scheduler_step_mode": {
+            "value": "epoch", "type": "select",
+            "options": ["epoch"],
+            "help": "When to step the scheduler. Currently only epoch-level stepping is supported.",
+        },
+        "scheduler_T_max": {
+            "value": 100, "type": "int", "for": ["CosineAnnealingLR"],
+            "min": 1, "help": "Number of epochs until LR reaches eta_min.",
+        },
+        "scheduler_eta_min": {
+            "value": 0.0, "type": "float", "for": ["CosineAnnealingLR", "CosineAnnealingWarmRestarts"],
+            "min": 0.0, "help": "Minimum learning rate.",
+        },
+        "scheduler_step_size": {
+            "value": 10, "type": "int", "for": ["StepLR"],
+            "min": 1, "help": "Decay LR every this many epochs.",
+        },
+        "scheduler_gamma": {
+            "value": 0.1, "type": "float", "for": ["StepLR", "MultiStepLR", "ExponentialLR"],
+            "min": 0.001, "max": 1.0,
+            "help": "Multiplicative factor for LR decay. Must be in (0, 1].",
+        },
+        "scheduler_factor": {
+            "value": 0.5, "type": "float", "for": ["ReduceLROnPlateau"],
+            "min": 0.001, "max": 1.0,
+            "help": "Factor by which LR is reduced on plateau. Must be in (0, 1].",
+        },
+        "scheduler_patience": {
+            "value": 10, "type": "int", "for": ["ReduceLROnPlateau"],
+            "min": 0, "help": "Number of epochs with no improvement before reducing LR.",
+        },
+        "scheduler_min_lr": {
+            "value": 1e-6, "type": "float", "for": ["ReduceLROnPlateau"],
+            "min": 0.0, "help": "Lower bound on LR.",
+        },
+        "scheduler_T_0": {
+            "value": 10, "type": "int", "for": ["CosineAnnealingWarmRestarts"],
+            "min": 1, "help": "Number of epochs for the first restart cycle.",
+        },
+        "scheduler_T_mult": {
+            "value": 1, "type": "int", "for": ["CosineAnnealingWarmRestarts"],
+            "min": 1, "help": "Multiplicative factor for cycle length after each restart.",
+        },
+        "scheduler_milestones": {
+            "value": "30,60,90", "type": "text", "for": ["MultiStepLR"],
+            "help": "Comma-separated epoch indices at which to decay LR (e.g. 30,60,90).",
+        },
+        "scheduler_warmup_steps": {
+            "value": 0, "type": "int",
+            "for": ["CosineAnnealingLR", "StepLR", "CosineAnnealingWarmRestarts",
+                    "MultiStepLR", "ExponentialLR"],
+            "min": 0,
+            "help": "Number of warmup epochs (LinearLR ramp). 0 = no warmup. "
+                    "Not supported with ReduceLROnPlateau.",
+        },
+        "scheduler_warmup_start_factor": {
+            "value": 0.1, "type": "float",
+            "for": ["CosineAnnealingLR", "StepLR", "CosineAnnealingWarmRestarts",
+                    "MultiStepLR", "ExponentialLR"],
+            "min": 0.001, "max": 1.0,
+            "help": "Initial LR multiplier at warmup start (e.g. 0.1 = 10% of base LR).",
+        },
+        "scheduler_warmup_end_factor": {
+            "value": 1.0, "type": "float",
+            "for": ["CosineAnnealingLR", "StepLR", "CosineAnnealingWarmRestarts",
+                    "MultiStepLR", "ExponentialLR"],
+            "min": 0.001,
+            "help": "LR multiplier at warmup end (1.0 = full base LR).",
+        },
     },
     "training": {
         "num_epochs": {"value": 20, "type": "int"},
@@ -115,7 +182,7 @@ def start_training():
             "status": "error",
             "message": f"Training already running (epoch {status['current_epoch']}/{status['total_epochs']})",
         }), 409
-    config = request.get_json(force=True)
+    config = flatten_scheduler_config(request.get_json(force=True))
     try:
         session.start(config)
         return jsonify({"status": "started", "session_id": session.get_status()["session_id"]})
@@ -182,26 +249,41 @@ def list_experiments():
 
 @app.route("/api/lr-preview", methods=["POST"])
 def lr_preview():
-    data = request.get_json(force=True)
-    import torch
-    base_lr = data.get("base_lr", 1e-3)
-    num_epochs = data.get("num_epochs", 100)
+    """Preview LR schedule using the same step-then-read semantics as Trainer.fit().
 
-    dummy = torch.nn.Linear(1, 1)
-    optimizer = torch.optim.SGD(dummy.parameters(), lr=base_lr)
-    scheduler = build_lr_scheduler(optimizer, data)
+    Request body (JSON):
+        scheduler_type   – canonical name or alias (required)
+        base_lr          – initial learning rate (default 1e-3)
+        num_epochs       – number of epochs to simulate (default 100)
+        metric_series    – optional list of val-loss values for ReduceLROnPlateau
+        scheduler_*      – per-type params (see SCHEDULER_PARAM_SPECS)
 
-    epochs = list(range(num_epochs))
-    lrs = []
-    for _ in epochs:
-        lrs.append(optimizer.param_groups[0]["lr"])
-        if scheduler is not None:
-            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                scheduler.step(999.0)  # worst-case: metric never improves
-            else:
-                scheduler.step()
+    Response (200):
+        epochs    – [0, …, num_epochs-1]
+        lr        – post-step LR at each epoch (matches training dashboard)
+        metadata  – scheduler_type, resolved config, min_lr, max_lr,
+                    step_mode, metric_mode
 
-    return jsonify({"epochs": epochs, "lr": lrs})
+    Response (400):
+        error – validation error message
+    """
+    data = flatten_scheduler_config(request.get_json(force=True))
+
+    base_lr = float(data.get("base_lr", 1e-3))
+    num_epochs = int(data.get("num_epochs", 100))
+    metric_series = data.get("metric_series", None)
+    if metric_series is not None:
+        try:
+            metric_series = [float(v) for v in metric_series]
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": f"metric_series must be a list of numbers: {exc}"}), 400
+
+    try:
+        result = simulate_lr_schedule(data, num_epochs, base_lr, metric_series)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify(result)
 
 
 @app.route("/api/gpu")
