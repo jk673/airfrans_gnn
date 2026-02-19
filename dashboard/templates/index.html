@@ -174,6 +174,30 @@
   .bar-yellow { background:#f39c12; }
   .bar-red { background:#e74c3c; }
 
+  /* ── Scheduler config group ── */
+  .sched-type-row { margin-bottom: 10px; }
+  .sched-params .field-row { transition: opacity .2s, max-height .2s; overflow: hidden; }
+  .sched-params .field-row.hidden-param { display: none; }
+  .sched-preview-area {
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid #333;
+  }
+  .btn-preview {
+    background: #a855f7; color: #fff; padding: 6px 16px; border: none;
+    border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.82em;
+  }
+  .btn-preview:hover { background: #9333ea; }
+  .sched-chart-wrap {
+    margin-top: 10px; display: none; background: #0f1a2e;
+    border-radius: 6px; padding: 10px;
+  }
+  .sched-chart-wrap.visible { display: block; }
+  .sched-chart-wrap h4 {
+    font-size: 0.8em; color: #a8a8b3; margin-bottom: 6px; text-align: center;
+  }
+  .sched-plateau-note {
+    color: #888; font-size: 0.72em; text-align: center; margin-top: 4px;
+  }
+
   @media (max-width:900px) {
     .config-grid { grid-template-columns:1fr; }
     .chart-grid { grid-template-columns:1fr 1fr; }
@@ -296,6 +320,47 @@ function renderConfigForm(schema) {
         grid.appendChild(sub);
       }
       container.appendChild(div);
+    } else if (groupName === 'scheduler') {
+      const div = document.createElement('div');
+      div.className = 'config-group';
+      div.innerHTML = '<h3>Scheduler</h3>';
+
+      // Type dropdown
+      const typeSpec = groupFields['scheduler_type'];
+      div.appendChild(makeFieldRow('scheduler.scheduler_type', 'type', typeSpec));
+
+      // Parameter fields with for-metadata
+      const paramsDiv = document.createElement('div');
+      paramsDiv.className = 'sched-params';
+      for (const [key, spec] of Object.entries(groupFields)) {
+        if (key === 'scheduler_type') continue;
+        const label = key.replace('scheduler_', '');
+        const row = makeFieldRow(`scheduler.${key}`, label, spec);
+        row.dataset.forScheds = JSON.stringify(spec['for'] || []);
+        paramsDiv.appendChild(row);
+      }
+      div.appendChild(paramsDiv);
+
+      // Preview area
+      const previewArea = document.createElement('div');
+      previewArea.className = 'sched-preview-area';
+      previewArea.innerHTML = `
+        <button class="btn-preview" onclick="previewLrSchedule()">Preview LR Schedule</button>
+        <div class="sched-chart-wrap" id="sched-chart-wrap">
+          <h4>LR Schedule Preview</h4>
+          <canvas id="c-lr-preview"></canvas>
+          <p class="sched-plateau-note" id="sched-plateau-note" style="display:none">
+            * ReduceLROnPlateau: showing worst-case (metric never improves)
+          </p>
+        </div>
+      `;
+      div.appendChild(previewArea);
+      container.appendChild(div);
+
+      // Bind show/hide logic
+      const typeSelect = document.getElementById('cfg-scheduler.scheduler_type');
+      typeSelect.addEventListener('change', () => updateSchedulerParams());
+      setTimeout(updateSchedulerParams, 0);
     } else {
       const div = document.createElement('div');
       div.className = 'config-group';
@@ -700,6 +765,93 @@ async function pollGpu() {
     const data = await res.json();
     renderGpuCards(data.gpus);
   } catch (e) { /* silent */ }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCHEDULER DYNAMIC PARAMS + PREVIEW
+// ═══════════════════════════════════════════════════════════════
+function updateSchedulerParams() {
+  const typeEl = document.getElementById('cfg-scheduler.scheduler_type');
+  if (!typeEl) return;
+  const selected = typeEl.value;
+  document.querySelectorAll('.sched-params .field-row').forEach(row => {
+    const forScheds = JSON.parse(row.dataset.forScheds || '[]');
+    if (forScheds.length === 0 || forScheds.includes(selected)) {
+      row.classList.remove('hidden-param');
+    } else {
+      row.classList.add('hidden-param');
+    }
+  });
+}
+
+let lrPreviewChart = null;
+
+async function previewLrSchedule() {
+  const cfg = collectConfig();
+  const payload = {
+    scheduler_type: cfg.scheduler_type || 'CosineAnnealingLR',
+    base_lr: cfg.lr || 1e-3,
+    num_epochs: cfg.num_epochs || 100,
+  };
+  // Copy all scheduler_ prefixed keys
+  for (const [k, v] of Object.entries(cfg)) {
+    if (k.startsWith('scheduler_') && k !== 'scheduler_type') {
+      payload[k] = v;
+    }
+  }
+
+  try {
+    const res = await fetch('/api/lr-preview', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    renderLrPreview(data, payload.scheduler_type);
+  } catch (e) {
+    alert('Preview failed: ' + e.message);
+  }
+}
+
+function renderLrPreview(data, schedType) {
+  const wrap = document.getElementById('sched-chart-wrap');
+  wrap.classList.add('visible');
+
+  const note = document.getElementById('sched-plateau-note');
+  note.style.display = schedType === 'ReduceLROnPlateau' ? 'block' : 'none';
+
+  if (lrPreviewChart) {
+    lrPreviewChart.destroy();
+  }
+
+  const ctx = document.getElementById('c-lr-preview');
+  lrPreviewChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.epochs,
+      datasets: [{
+        label: 'Learning Rate',
+        data: data.lr,
+        borderColor: '#a855f7',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+      }],
+    },
+    options: {
+      responsive: true,
+      animation: false,
+      plugins: {
+        legend: { labels: { color: '#ccc' } },
+        zoom: zoomOpts,
+      },
+      scales: {
+        x: { title: { display: true, text: 'Epoch', color: '#888' }, ticks: { color: '#888' }, grid: { color: '#222' } },
+        y: { title: { display: true, text: 'LR', color: '#888' }, ticks: { color: '#888' }, grid: { color: '#222' } },
+      },
+    },
+  });
+  ctx.addEventListener('dblclick', () => lrPreviewChart.resetZoom());
 }
 
 // ═══════════════════════════════════════════════════════════════
