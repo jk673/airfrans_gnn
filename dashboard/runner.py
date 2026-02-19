@@ -20,6 +20,45 @@ from src.benchmark import run_benchmark_and_log_experiment
 LOSS_KEYS = ("total_loss", "mse_loss", "continuity_loss", "momentum_loss", "bc_loss")
 
 
+def build_lr_scheduler(optimizer, cfg: dict):
+    """Build a PyTorch LR scheduler from a flat config dict.
+
+    Returns None for Constant (no scheduling).
+    """
+    stype = cfg.get("scheduler_type", "CosineAnnealingLR")
+
+    if stype == "Constant":
+        return None
+    elif stype == "CosineAnnealingLR":
+        return torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=cfg.get("scheduler_T_max", 100),
+            eta_min=cfg.get("scheduler_eta_min", 0.0),
+        )
+    elif stype == "StepLR":
+        return torch.optim.lr_scheduler.StepLR(
+            optimizer,
+            step_size=cfg.get("scheduler_step_size", 10),
+            gamma=cfg.get("scheduler_gamma", 0.1),
+        )
+    elif stype == "ReduceLROnPlateau":
+        return torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            factor=cfg.get("scheduler_factor", 0.5),
+            patience=int(cfg.get("scheduler_patience", 10)),
+            min_lr=cfg.get("scheduler_min_lr", 1e-6),
+        )
+    elif stype == "CosineAnnealingWarmRestarts":
+        return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer,
+            T_0=cfg.get("scheduler_T_0", 10),
+            T_mult=int(cfg.get("scheduler_T_mult", 1)),
+            eta_min=cfg.get("scheduler_eta_min", 0.0),
+        )
+    else:
+        raise ValueError(f"Unknown scheduler type: {stype}")
+
+
 @dataclass
 class TrainingState:
     state: str = "idle"  # idle | loading | training | benchmarking | completed | failed | stopping
@@ -143,9 +182,7 @@ class TrainingSession:
                 lr=cfg.get("lr", 1e-3),
                 weight_decay=cfg.get("weight_decay", 1e-4),
             )
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=cfg.get("scheduler_T_max", 100),
-            )
+            scheduler = build_lr_scheduler(optimizer, cfg)
 
             # 5. Train
             self._set_state(state="training")
