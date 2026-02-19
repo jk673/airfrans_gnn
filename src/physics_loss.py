@@ -976,7 +976,7 @@ class NavierStokesPhysicsLoss(nn.Module):
             except Exception as e:
                 print(f"[physics] momentum skipped: {e}")
             try:
-                if self.bc_w > 0.0:
+                if self.bc_w0 > 0.0 or self.bc_w_target > 0.0:
                     bc_info = self._bc_loss(pred_scaled, data, Uref_local, x_phys=x_phys)
                     if isinstance(bc_info, dict):
                         bc_loss = bc_info.get("bc_loss", torch.zeros((), device=device))
@@ -994,7 +994,7 @@ class NavierStokesPhysicsLoss(nn.Module):
 
         losses["continuity_loss"] = cont_loss
         losses["momentum_loss"] = mom_loss
-        if self.bc_w > 0.0:
+        if self.bc_w0 > 0.0 or self.bc_w_target > 0.0:
             losses.setdefault("bc_loss", bc_loss)
             losses.setdefault("bc_wall_loss", torch.tensor(0.0, device=device))
             losses.setdefault("bc_inlet_loss", torch.tensor(0.0, device=device))

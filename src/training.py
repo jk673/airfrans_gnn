@@ -54,7 +54,9 @@ def compute_loss_with_physics(predictions, targets, data, loss_fn=None, *, step=
                     log_dict[k] = float(v)
             return total_loss, log_dict
         except Exception as e:
+            import traceback
             print(f"Warning: Physics loss failed ({e}), falling back to MSE")
+            traceback.print_exc()
 
     mse_loss = _mse_loss_fn(predictions, targets)
     return mse_loss, {
