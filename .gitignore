@@ -65,3 +65,6 @@ docs/benchmark/results.md
 
 # Experiment outputs (generated, not tracked)
 experiments/results/
+
+# Git worktrees
+.worktrees/
