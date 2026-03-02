@@ -127,7 +127,7 @@ def run_epoch(loader, model, device, *, amp_enabled=False, desc='val', loss_fn=N
             with torch.autocast(device_type="cuda", enabled=(amp_enabled and torch.cuda.is_available()),
                                 dtype=torch.bfloat16):
                 out = model(b)
-                _, loss_dict = compute_loss_with_physics(out, b.y, b, loss_fn=loss_fn)
+                _, loss_dict = compute_loss_with_physics(out, b.y, b, loss_fn=None)
             _collect(acc, loss_dict)
             pbar.set_postfix(_postfix(loss_dict))
         finally:

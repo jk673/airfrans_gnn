@@ -163,8 +163,10 @@ def conservative_divergence(
         if node_area is not None:
             node_area = node_area.to(velocity.device, velocity.dtype) * (_s * _s)
 
-    nx = dy / length
-    ny = -dx / length
+    # Normal along i→j direction (vertex-centered FVM: outward normal = edge direction)
+    # Old: (dy/length, -dx/length) was perpendicular → computed -vorticity, not divergence
+    nx = dx / length
+    ny = dy / length
 
     ui = velocity[row]       # [E,2]
     uj = velocity[col]

@@ -26,8 +26,10 @@ coverage.xml
 
 # IDE / editors
 .vscode/
-.claude/
 .mcp.json
+
+# Claude Code — track skills/settings but not local overrides
+.claude/settings.local.json
 
 # Type checking / linting
 .mypy_cache/

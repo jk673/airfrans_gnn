@@ -1,6 +1,6 @@
 # AirfRANS 2D Airfoil - GNN Surrogate
 
-Auto-generated benchmark comparison. Updated: 2026-02-19 00:30:40 UTC
+Auto-generated benchmark comparison. Updated: 2026-02-19 11:50:22 UTC
 
 ## Benchmark Comparison
 
@@ -13,10 +13,320 @@ Auto-generated benchmark comparison. Updated: 2026-02-19 00:30:40 UTC
 | **EXP_0003** (scarce-h16-l14) | 0.7512 | 0.7799 | 2.7251 | 2.6412 | 0.6271 | 0.6361 |
 | **EXP_0004** (scarce-h8-l4) | 0.9936 | 0.9654 | 3.4215 | 1.2168 | 0.0647 | -0.5504 |
 | **EXP_0005** (scarce-h16-l14) | 0.6430 | 0.6778 | 4.0872 | 1.5974 | 0.8647 | 0.8887 |
+| **EXP_0006** (scarce-h16-l14) | 0.4100 | 0.4340 | 5.3623 | 0.9358 | 0.8256 | 0.9083 |
+| **EXP_0007** (scarce-h16-l14) | 0.3266 | 0.3351 | 3.4650 | 0.3331 | 0.8632 | 0.9714 |
+| **EXP_0008** (scarce-h16-l14) | 0.3930 | 0.4127 | 2.7429 | 0.7370 | 0.9068 | 0.8887 |
+| **EXP_0009** (scarce-h16-l14) | 0.3826 | 0.3986 | 1.6633 | 0.6192 | 0.8902 | 0.9293 |
+| **EXP_0010** (scarce-h16-l14) | 0.4002 | 0.4218 | 1.5452 | 0.7788 | 0.9068 | 0.9128 |
 
 ---
 
 ## Experiment Details
+
+### EXP_0010 — 2026-02-19 11:50:22 UTC
+
+**Model:** scarce-h16-l14 | **Task:** scarce | **Parameters:** 54,052 | **Duration:** 12m 36s
+
+**Notes:** momentum + bc loss + continuity loss
+
+| Benchmark Metric | Value |
+|--------|-------|
+| volume_rel_l2 | 0.4002 |
+| surface_rel_l2 | 0.4218 |
+| cd_relative_error | 1.5452 |
+| cl_relative_error | 0.7788 |
+| rho_d | 0.9068 |
+| rho_l | 0.9128 |
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| best_val_loss | 0.1685 |
+| best_epoch | 253 |
+| finalloss | 0.3136 |
+| final_val_loss | 0.1705 |
+| artifacts_uploaded | 0 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "task": "scarce",
+  "hidden": 16,
+  "layers": 14,
+  "scheduler": {
+    "type": "CosineAnnealingWarmRestarts",
+    "params": {
+      "scheduler_T_0": 100,
+      "scheduler_T_max": 100,
+      "scheduler_T_mult": 1,
+      "scheduler_eta_min": 0.0,
+      "scheduler_factor": 0.5,
+      "scheduler_gamma": 0.1,
+      "scheduler_milestones": "30,60,90",
+      "scheduler_min_lr": 1e-06,
+      "scheduler_patience": 10,
+      "scheduler_step_mode": "epoch",
+      "scheduler_step_size": 10,
+      "scheduler_warmup_end_factor": 1.0,
+      "scheduler_warmup_start_factor": 0.1,
+      "scheduler_warmup_steps": 0
+    },
+    "step_mode": "epoch",
+    "warmup_steps": 0,
+    "first_lr": 0.0009997532801828658,
+    "final_lr": 0.001
+  }
+}
+```
+
+</details>
+
+---
+
+### EXP_0009 — 2026-02-19 11:34:45 UTC
+
+**Model:** scarce-h16-l14 | **Task:** scarce | **Parameters:** 54,052 | **Duration:** 8m 23s
+
+**Notes:** momentum + bc loss + continuity loss
+
+| Benchmark Metric | Value |
+|--------|-------|
+| volume_rel_l2 | 0.3826 |
+| surface_rel_l2 | 0.3986 |
+| cd_relative_error | 1.6633 |
+| cl_relative_error | 0.6192 |
+| rho_d | 0.8902 |
+| rho_l | 0.9293 |
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| best_val_loss | 0.1804 |
+| best_epoch | 157 |
+| finalloss | 0.3444 |
+| final_val_loss | 0.1867 |
+| artifacts_uploaded | 0 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "task": "scarce",
+  "hidden": 16,
+  "layers": 14,
+  "scheduler": {
+    "type": "CosineAnnealingWarmRestarts",
+    "params": {
+      "scheduler_T_0": 100,
+      "scheduler_T_max": 100,
+      "scheduler_T_mult": 1,
+      "scheduler_eta_min": 0.0,
+      "scheduler_factor": 0.5,
+      "scheduler_gamma": 0.1,
+      "scheduler_milestones": "30,60,90",
+      "scheduler_min_lr": 1e-06,
+      "scheduler_patience": 10,
+      "scheduler_step_mode": "epoch",
+      "scheduler_step_size": 10,
+      "scheduler_warmup_end_factor": 1.0,
+      "scheduler_warmup_start_factor": 0.1,
+      "scheduler_warmup_steps": 0
+    },
+    "step_mode": "epoch",
+    "warmup_steps": 0,
+    "first_lr": 0.0009997532801828658,
+    "final_lr": 0.001
+  }
+}
+```
+
+</details>
+
+---
+
+### EXP_0008 — 2026-02-19 11:22:38 UTC
+
+**Model:** scarce-h16-l14 | **Task:** scarce | **Parameters:** 54,052 | **Duration:** 8m 27s
+
+**Notes:** momentum + bc loss
+
+| Benchmark Metric | Value |
+|--------|-------|
+| volume_rel_l2 | 0.3930 |
+| surface_rel_l2 | 0.4127 |
+| cd_relative_error | 2.7429 |
+| cl_relative_error | 0.7370 |
+| rho_d | 0.9068 |
+| rho_l | 0.8887 |
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| best_val_loss | 0.1321 |
+| best_epoch | 157 |
+| finalloss | 0.2910 |
+| final_val_loss | 0.1377 |
+| artifacts_uploaded | 0 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "task": "scarce",
+  "hidden": 16,
+  "layers": 14,
+  "scheduler": {
+    "type": "CosineAnnealingWarmRestarts",
+    "params": {
+      "scheduler_T_0": 100,
+      "scheduler_T_max": 100,
+      "scheduler_T_mult": 1,
+      "scheduler_eta_min": 0.0,
+      "scheduler_factor": 0.5,
+      "scheduler_gamma": 0.1,
+      "scheduler_milestones": "30,60,90",
+      "scheduler_min_lr": 1e-06,
+      "scheduler_patience": 10,
+      "scheduler_step_mode": "epoch",
+      "scheduler_step_size": 10,
+      "scheduler_warmup_end_factor": 1.0,
+      "scheduler_warmup_start_factor": 0.1,
+      "scheduler_warmup_steps": 0
+    },
+    "step_mode": "epoch",
+    "warmup_steps": 0,
+    "first_lr": 0.0009997532801828658,
+    "final_lr": 0.001
+  }
+}
+```
+
+</details>
+
+---
+
+### EXP_0007 — 2026-02-19 11:13:44 UTC
+
+**Model:** scarce-h16-l14 | **Task:** scarce | **Parameters:** 54,052 | **Duration:** 8m 19s
+
+**Notes:** data loss only
+
+| Benchmark Metric | Value |
+|--------|-------|
+| volume_rel_l2 | 0.3266 |
+| surface_rel_l2 | 0.3351 |
+| cd_relative_error | 3.4650 |
+| cl_relative_error | 0.3331 |
+| rho_d | 0.8632 |
+| rho_l | 0.9714 |
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| best_val_loss | 0.0708 |
+| best_epoch | 162 |
+| finalloss | 0.1876 |
+| final_val_loss | 0.0833 |
+| artifacts_uploaded | 0 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "task": "scarce",
+  "hidden": 16,
+  "layers": 14,
+  "scheduler": {
+    "type": "CosineAnnealingWarmRestarts",
+    "params": {
+      "scheduler_T_0": 100,
+      "scheduler_T_max": 100,
+      "scheduler_T_mult": 1,
+      "scheduler_eta_min": 0.0,
+      "scheduler_factor": 0.5,
+      "scheduler_gamma": 0.1,
+      "scheduler_milestones": "30,60,90",
+      "scheduler_min_lr": 1e-06,
+      "scheduler_patience": 10,
+      "scheduler_step_mode": "epoch",
+      "scheduler_step_size": 10,
+      "scheduler_warmup_end_factor": 1.0,
+      "scheduler_warmup_start_factor": 0.1,
+      "scheduler_warmup_steps": 0
+    },
+    "step_mode": "epoch",
+    "warmup_steps": 0,
+    "first_lr": 0.0009997532801828658,
+    "final_lr": 0.001
+  }
+}
+```
+
+</details>
+
+---
+
+### EXP_0006 — 2026-02-19 11:04:52 UTC
+
+**Model:** scarce-h16-l14 | **Task:** scarce | **Parameters:** 54,052 | **Duration:** 8m 14s
+
+**Notes:** momentum only 
+
+| Benchmark Metric | Value |
+|--------|-------|
+| volume_rel_l2 | 0.4100 |
+| surface_rel_l2 | 0.4340 |
+| cd_relative_error | 5.3623 |
+| cl_relative_error | 0.9358 |
+| rho_d | 0.8256 |
+| rho_l | 0.9083 |
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| best_val_loss | 0.1396 |
+| best_epoch | 170 |
+| finalloss | 0.3761 |
+| final_val_loss | 0.1464 |
+| artifacts_uploaded | 0 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "task": "scarce",
+  "hidden": 16,
+  "layers": 14,
+  "scheduler": {
+    "type": "CosineAnnealingWarmRestarts",
+    "params": {
+      "scheduler_T_0": 100,
+      "scheduler_T_max": 100,
+      "scheduler_T_mult": 1,
+      "scheduler_eta_min": 0.0,
+      "scheduler_factor": 0.5,
+      "scheduler_gamma": 0.1,
+      "scheduler_milestones": "30,60,90",
+      "scheduler_min_lr": 1e-06,
+      "scheduler_patience": 10,
+      "scheduler_step_mode": "epoch",
+      "scheduler_step_size": 10,
+      "scheduler_warmup_end_factor": 1.0,
+      "scheduler_warmup_start_factor": 0.1,
+      "scheduler_warmup_steps": 0
+    },
+    "step_mode": "epoch",
+    "warmup_steps": 0,
+    "first_lr": 0.0009997532801828658,
+    "final_lr": 0.001
+  }
+}
+```
+
+</details>
+
+---
 
 ### EXP_0005 — 2026-02-19 00:30:40 UTC
 
