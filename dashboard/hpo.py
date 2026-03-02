@@ -55,7 +55,7 @@ DEFAULT_SEARCH_SPACE: list[HpoParamSpec] = [
     HpoParamSpec("hidden_dim",       "model",          "int",         min=64,    max=256,   step=32,  default=128),
     HpoParamSpec("num_layers",       "model",          "int",         min=8,     max=20,    step=2,   default=14),
     HpoParamSpec("dropout",          "model",          "float",       min=0.0,   max=0.3,   step=0.05, default=0.1),
-    HpoParamSpec("num_global_tokens","model",          "int",         min=0,     max=8,     step=1,   default=0),
+    HpoParamSpec("num_global_tokens","model",          "int",         min=0,     max=4,     step=1,   default=0),
     # Optimizer
     HpoParamSpec("lr",               "optimizer",      "float",       min=1e-5,  max=1e-2,  log_scale=True, default=1e-3),
     HpoParamSpec("weight_decay",     "optimizer",      "float",       min=1e-6,  max=1e-3,  log_scale=True, default=1e-4),
@@ -66,16 +66,16 @@ DEFAULT_SEARCH_SPACE: list[HpoParamSpec] = [
                  default="CosineAnnealingLR"),
     HpoParamSpec("scheduler_T_max",  "scheduler",      "int",         min=20,    max=200,   step=10,  default=100),
     HpoParamSpec("scheduler_gamma",  "scheduler",      "float",       min=0.5,   max=0.99,  step=0.01, default=0.95),
-    # Physics
-    HpoParamSpec("cont_weight",      "physics",        "float",       min=0.001, max=1.0,   log_scale=True, default=0.05),
-    HpoParamSpec("mom_weight",       "physics",        "float",       min=0.001, max=1.0,   log_scale=True, default=0.05),
-    HpoParamSpec("bc_weight",        "physics",        "float",       min=0.01,  max=1.0,   log_scale=True, default=0.01),
-    HpoParamSpec("cont_target",      "physics",        "float",       min=0.01,  max=1.0,   log_scale=True, default=0.1),
-    HpoParamSpec("mom_target",       "physics",        "float",       min=0.01,  max=1.0,   log_scale=True, default=0.1),
+    # Physics — min=0 means "can be disabled"; log_scale=True gives finer resolution near zero
+    HpoParamSpec("cont_weight",      "physics",        "float",       min=0.0,   max=0.5,   log_scale=True, default=0.05),
+    HpoParamSpec("mom_weight",       "physics",        "float",       min=0.0,   max=0.5,   log_scale=True, default=0.05),
+    HpoParamSpec("bc_weight",        "physics",        "float",       min=0.0,   max=0.5,   log_scale=True, default=0.01),
+    HpoParamSpec("cont_target",      "physics",        "float",       min=0.0,   max=0.5,   log_scale=True, default=0.1),
+    HpoParamSpec("mom_target",       "physics",        "float",       min=0.0,   max=0.5,   log_scale=True, default=0.1),
     HpoParamSpec("ramp_start_epoch", "physics",        "int",         min=0,     max=50,    step=5,   default=20),
     HpoParamSpec("ramp_epochs",      "physics",        "int",         min=10,    max=80,    step=10,  default=30),
     # Training
-    HpoParamSpec("batch_size",       "training",       "int",         min=1,     max=8,     step=1,   default=4),
+    HpoParamSpec("batch_size",       "training",       "int",         min=1,     max=2,     step=1,   default=2),
     HpoParamSpec("grad_clip",        "training",       "float",       min=0.1,   max=10.0,  step=0.1, default=1.0),
     HpoParamSpec("amp",              "training",       "bool",        choices=[True, False],  default=True),
     # Regularization
@@ -159,13 +159,17 @@ def _suggest_params(trial: Any, specs: list[HpoParamSpec]) -> dict:
                 spec.name, int(spec.min), int(spec.max), step=step
             )
         elif spec.type == "float":
+            low = spec.min
+            # Optuna requires low > 0 for log distributions; clamp silently
+            if spec.log_scale and low <= 0:
+                low = 1e-6
             if spec.step > 0 and not spec.log_scale:
                 params[spec.name] = trial.suggest_float(
-                    spec.name, spec.min, spec.max, step=spec.step
+                    spec.name, low, spec.max, step=spec.step
                 )
             else:
                 params[spec.name] = trial.suggest_float(
-                    spec.name, spec.min, spec.max, log=spec.log_scale
+                    spec.name, low, spec.max, log=spec.log_scale
                 )
         elif spec.type in ("categorical", "bool"):
             choices = [True, False] if spec.type == "bool" else list(spec.choices)
