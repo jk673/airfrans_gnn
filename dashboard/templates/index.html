@@ -289,10 +289,44 @@
     border:1px solid #e0e0e0;
   }
   .hpo-progress { font-size:0.85em; color:#666666; }
+  .hpo-progress-wrap {
+    display:flex; align-items:center; gap:10px; min-width:min(520px, 100%);
+    flex:1 1 360px;
+  }
+  .hpo-progress-track {
+    flex:1; min-width:180px; height:10px; border-radius:999px;
+    background:#e6e6e6; overflow:hidden;
+  }
+  .hpo-progress-fill {
+    height:100%; width:0%; background:linear-gradient(90deg, #f59e0b, #e66100);
+    transition:width 180ms ease-out;
+  }
+  .hpo-progress-meta { font-size:0.78em; color:#666666; white-space:nowrap; }
   .phase-badge { padding:3px 8px; border-radius:4px; font-size:0.75em; font-weight:bold; }
   .phase-lhs  { background:#1565c0; color:#fff; }
   .phase-tpe  { background:#e65100; color:#fff; }
   .phase-idle { background:#e0e0e0; color:#666666; }
+  .current-trial-meta {
+    font-size:0.82em; color:#666666; margin-bottom:10px;
+  }
+  .current-trial-grid {
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));
+    gap:8px;
+  }
+  .current-trial-empty {
+    font-size:0.82em; color:#999999; font-style:italic;
+  }
+  .current-trial-item {
+    background:#ffffff; border:1px solid #e5e5e5; border-radius:6px;
+    padding:8px 10px;
+  }
+  .current-trial-key {
+    display:block; font-size:0.72em; color:#888888; text-transform:uppercase; letter-spacing:0.4px;
+  }
+  .current-trial-val {
+    display:block; margin-top:3px; font-size:0.88em; color:#212529; font-weight:600;
+    word-break:break-word;
+  }
 </style>
 </head>
 <body>
@@ -363,6 +397,10 @@
     <span class="state-badge state-idle" id="hpo-state-badge">IDLE</span>
     <span class="phase-badge phase-idle" id="hpo-phase-badge">—</span>
     <span class="hpo-progress" id="hpo-progress-info">No HPO running</span>
+    <div class="hpo-progress-wrap">
+      <div class="hpo-progress-track"><div class="hpo-progress-fill" id="hpo-progress-fill"></div></div>
+      <span class="hpo-progress-meta" id="hpo-progress-meta">0% | 0 finished</span>
+    </div>
   </div>
 
   <div class="hpo-layout">
@@ -407,6 +445,10 @@
           <input type="number" id="hpo-pruning-patience" value="10" min="1" max="100">
         </div>
         <div class="hpo-field-row">
+          <label title="Seconds of HPO run time after which current status is saved to daily_notebook. Default 9000 = 2.5h.">Notebook Snapshot (s)</label>
+          <input type="number" id="hpo-notebook-snapshot-sec" value="9000" min="1">
+        </div>
+        <div class="hpo-field-row">
           <label>Task</label>
           <select id="hpo-task">
             <option value="scarce" selected>scarce</option>
@@ -431,6 +473,23 @@
 
     <!-- ── Right column: Charts + Results ── -->
     <div style="display:flex;flex-direction:column;gap:14px;">
+
+      <div class="hpo-card">
+        <h3>Current Trial</h3>
+        <div class="current-trial-meta" id="hpo-current-meta">No active trial</div>
+        <div id="hpo-epoch-progress" style="display:none;margin:8px 0 10px 0;background:#eeeeee;border-radius:6px;padding:8px 10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <span style="font-size:0.78em;color:#555555;font-weight:600;">Epoch Progress</span>
+            <span id="hpo-epoch-label" style="font-size:0.78em;color:#E66100;font-weight:700;">0 / 0</span>
+          </div>
+          <div style="background:#cccccc;border-radius:4px;height:6px;overflow:hidden;">
+            <div id="hpo-epoch-fill" style="height:100%;width:0%;background:#E66100;border-radius:4px;transition:width 0.3s ease;"></div>
+          </div>
+        </div>
+        <div class="current-trial-grid" id="hpo-current-grid">
+          <div class="current-trial-empty">Current hyperparameter combination will appear here while HPO is running.</div>
+        </div>
+      </div>
 
       <!-- Optimization history chart -->
       <div class="hpo-card">
@@ -476,9 +535,13 @@
 <div class="gpu-panel" id="gpu-panel">
   <div class="gpu-header" onclick="toggleGpuPanel()">
     <h3>GPU Monitor</h3>
+    <button class="toggle-btn" title="Restart dashboard" onclick="event.stopPropagation();restartDashboard()" style="margin-right:4px;font-size:0.85em;">&#8635;</button>
     <button class="toggle-btn" id="gpu-toggle">&#9660;</button>
   </div>
   <div class="gpu-body" id="gpu-body">
+    <div id="gpu-stop-banner" style="display:none;background:#f97316;color:#fff;border-radius:4px;padding:4px 8px;font-size:0.78em;font-weight:700;margin-bottom:8px;text-align:center;letter-spacing:0.03em;">
+      &#9209; STOP SIGNAL SENT
+    </div>
     <div id="gpu-cards"><span style="color:#555">Loading...</span></div>
   </div>
 </div>
@@ -747,7 +810,11 @@ async function startTraining() {
 async function stopTraining() {
   const res = await fetch('/api/stop', {method: 'POST'});
   const data = await res.json();
-  if (!res.ok) alert(data.message || 'Failed to stop');
+  if (!res.ok) { alert(data.message || 'Failed to stop'); return; }
+  document.getElementById('gpu-stop-banner').style.display = 'block';
+  if (!document.getElementById('gpu-panel').classList.contains('collapsed')) {
+    // ensure panel is visible so user sees the banner
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -877,9 +944,15 @@ async function pollStatus() {
   try {
     const res = await fetch('/api/status');
     const data = await res.json();
+    const prevTrainState = lastState;
     updateStatusBar(data);
     if (['training', 'stopping'].includes(data.state)) {
       updateCharts(data.metrics);
+    }
+    // Reload after user-initiated stop completes
+    if (prevTrainState === 'stopping' && data.state === 'idle') {
+      document.getElementById('gpu-stop-banner').style.display = 'none';
+      location.reload();
     }
   } catch (e) {
     // silent
@@ -1044,6 +1117,22 @@ async function pollGpu() {
     const data = await res.json();
     renderGpuCards(data.gpus);
   } catch (e) { /* silent */ }
+}
+
+async function restartDashboard() {
+  if (!confirm('Restart the dashboard server?')) return;
+  document.getElementById('gpu-cards').innerHTML = '<span style="color:#E66100;font-weight:600;">Restarting…</span>';
+  try {
+    await fetch('/api/restart', { method: 'POST' });
+  } catch (_) { /* process replaced — connection drops */ }
+  // Poll until the server is back up, then reload
+  const poll = setInterval(async () => {
+    try {
+      await fetch('/api/gpu');
+      clearInterval(poll);
+      location.reload();
+    } catch (_) { /* still restarting */ }
+  }, 1000);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1378,11 +1467,79 @@ function renderBestParams(params) {
   }
 }
 
+function formatHpoParamValue(value) {
+  if (typeof value === 'number') {
+    if (Number.isInteger(value)) return String(value);
+    const absVal = Math.abs(value);
+    if ((absVal > 0 && absVal < 1e-3) || absVal >= 1e4) return value.toExponential(3);
+    return value.toFixed(6).replace(/\.?0+$/, '');
+  }
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return String(value);
+}
+
+function renderCurrentHpoParams(data) {
+  const meta = document.getElementById('hpo-current-meta');
+  const grid = document.getElementById('hpo-current-grid');
+  const epochBox  = document.getElementById('hpo-epoch-progress');
+  const epochFill = document.getElementById('hpo-epoch-fill');
+  const epochLabel = document.getElementById('hpo-epoch-label');
+  const running = ['loading', 'running', 'stopping'].includes(data.state);
+  const params = data.current_params || {};
+  const entries = Object.entries(params);
+
+  // Epoch progress mini-window
+  const curEpoch = data.current_epoch || 0;
+  const totEpoch = data.epochs_per_trial || 0;
+  if (running && totEpoch > 0) {
+    epochBox.style.display = 'block';
+    const pct = Math.min(100, (curEpoch / totEpoch) * 100);
+    epochFill.style.width = pct + '%';
+    epochLabel.textContent = `${curEpoch} / ${totEpoch}`;
+  } else {
+    epochBox.style.display = 'none';
+  }
+
+  if (!running && data.state !== 'completed') {
+    meta.textContent = 'No active trial';
+    grid.innerHTML = '<div class="current-trial-empty">Current hyperparameter combination will appear here while HPO is running.</div>';
+    return;
+  }
+
+  if (data.state === 'loading') {
+    meta.textContent = 'Preparing data and search space...';
+    grid.innerHTML = '<div class="current-trial-empty">First trial parameters will appear once sampling starts.</div>';
+    return;
+  }
+
+  if (entries.length === 0) {
+    meta.textContent = data.state === 'completed' ? 'Run completed' : 'Waiting for sampled parameters...';
+    grid.innerHTML = '<div class="current-trial-empty">No active hyperparameter combination to show.</div>';
+    return;
+  }
+
+  const cur = data.current_trial || 0;
+  const tot = data.total_trials || 0;
+  const phase = (data.phase || 'lhs').toUpperCase();
+  meta.textContent = `Trial ${cur}/${tot} • ${phase}`;
+
+  const order = new Map(hpoSearchSpace.map((spec, idx) => [spec.name, idx]));
+  entries.sort((a, b) => (order.get(a[0]) ?? 999) - (order.get(b[0]) ?? 999));
+  grid.innerHTML = entries.map(([key, value]) => `
+    <div class="current-trial-item">
+      <span class="current-trial-key">${escapeHtml(key)}</span>
+      <span class="current-trial-val">${escapeHtml(formatHpoParamValue(value))}</span>
+    </div>
+  `).join('');
+}
+
 // ── Status bar update ─────────────────────────────────────────
 function updateHpoStatusBar(data) {
   const badge      = document.getElementById('hpo-state-badge');
   const phaseBadge = document.getElementById('hpo-phase-badge');
   const progress   = document.getElementById('hpo-progress-info');
+  const progressFill = document.getElementById('hpo-progress-fill');
+  const progressMeta = document.getElementById('hpo-progress-meta');
   const btnStart   = document.getElementById('btn-hpo-start');
   const btnStop    = document.getElementById('btn-hpo-stop');
   const btnApply   = document.getElementById('btn-apply-best');
@@ -1407,16 +1564,28 @@ function updateHpoStatusBar(data) {
 
   if (state === 'idle' || state === 'stopped') {
     progress.textContent = 'No HPO running';
+    progressFill.style.width = '0%';
+    progressMeta.textContent = '0% | 0 finished';
   } else if (state === 'loading') {
     progress.textContent = 'Loading data…';
+    progressFill.style.width = '0%';
+    progressMeta.textContent = '0% | preparing run';
   } else if (running || state === 'completed') {
     const cur  = data.current_trial || 0;
     const tot  = data.total_trials  || 0;
     const best = data.best_value != null ? data.best_value.toFixed(6) : '—';
     const ela  = data.elapsed_sec  ? formatTime(data.elapsed_sec) : '0s';
+    const done = data.finished_trials || 0;
+    const completed = data.completed_trials || 0;
+    const pruned = data.pruned_trials || 0;
+    const pct = Math.max(0, Math.min(100, data.progress_pct || 0));
     progress.textContent = `Trial ${cur}/${tot} | Best: ${best} | ${ela}`;
+    progressFill.style.width = `${pct}%`;
+    progressMeta.textContent = `${pct.toFixed(0)}% | ${done}/${tot} finished | ${completed} complete | ${pruned} pruned`;
   } else if (state === 'failed') {
     progress.textContent = 'HPO failed: ' + (data.error_message || '');
+    progressFill.style.width = `${Math.max(0, Math.min(100, data.progress_pct || 0))}%`;
+    progressMeta.textContent = 'Run failed';
   }
 }
 
@@ -1425,10 +1594,18 @@ async function pollHpoStatus() {
   try {
     const res  = await fetch('/api/hpo/status');
     const data = await res.json();
+    const prevState = hpoLastState;
+    hpoLastState = data.state;
     updateHpoStatusBar(data);
+    renderCurrentHpoParams(data);
     renderTrialTable(data.trials || []);
     updateHpoCharts(data.trials || []);
     renderBestParams(data.best_params);
+    // If we transitioned out of stopping → fully stopped: reload to clean slate
+    if (prevState === 'stopping' && (data.state === 'stopped' || data.state === 'idle')) {
+      document.getElementById('gpu-stop-banner').style.display = 'none';
+      location.reload();
+    }
   } catch (e) { /* silent */ }
 }
 
@@ -1439,12 +1616,13 @@ async function startHpo() {
 
   const searchSpace = collectHpoSearchSpace();
   const settings = {
-    n_lhs:            parseInt(document.getElementById('hpo-n-lhs').value, 10),
-    total_trials:     parseInt(document.getElementById('hpo-total-trials').value, 10),
-    epochs_per_trial: parseInt(document.getElementById('hpo-epochs-per-trial').value, 10),
-    pruning_patience: parseInt(document.getElementById('hpo-pruning-patience').value, 10),
-    task:             document.getElementById('hpo-task').value,
-    device:           document.getElementById('hpo-device').value,
+    n_lhs:                  parseInt(document.getElementById('hpo-n-lhs').value, 10),
+    total_trials:           parseInt(document.getElementById('hpo-total-trials').value, 10),
+    epochs_per_trial:       parseInt(document.getElementById('hpo-epochs-per-trial').value, 10),
+    pruning_patience:       parseInt(document.getElementById('hpo-pruning-patience').value, 10),
+    notebook_snapshot_sec:  parseFloat(document.getElementById('hpo-notebook-snapshot-sec').value),
+    task:                   document.getElementById('hpo-task').value,
+    device:                 document.getElementById('hpo-device').value,
   };
 
   const btnStart = document.getElementById('btn-hpo-start');
@@ -1472,7 +1650,8 @@ async function startHpo() {
 async function stopHpo() {
   const res  = await fetch('/api/hpo/stop', { method: 'POST' });
   const data = await res.json();
-  if (!res.ok) alert(data.message || 'Failed to stop HPO');
+  if (!res.ok) { alert(data.message || 'Failed to stop HPO'); return; }
+  document.getElementById('gpu-stop-banner').style.display = 'block';
 }
 
 // ── Apply best to Config tab ──────────────────────────────────

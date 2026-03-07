@@ -6,10 +6,12 @@ running each trial in a background thread via Trainer.fit().
 
 from __future__ import annotations
 
+import datetime
 import math
 import threading
 import time
 from dataclasses import dataclass, field, asdict
+from pathlib import Path
 from typing import Any, Optional
 
 import torch
@@ -143,6 +145,67 @@ def generate_lhs_samples(specs: list[HpoParamSpec], n: int, seed: int = 42) -> l
     return samples
 
 
+# ── Resource cost estimation ─────────────────────────────────────────────────
+
+def _resource_cost(sample: dict) -> float:
+    """Estimate relative GPU memory/compute cost of a trial config.
+
+    Used to sort LHS samples cheapest-first so early trials are less likely
+    to OOM and provide signal faster. Not an exact measure — just a ranking key.
+
+    Dominant terms:
+      hidden_dim   – parameter count scales as O(hidden²) per layer
+      num_layers   – linear multiplier on forward/backward cost
+      num_global_tokens – adds attention overhead per token
+      batch_size   – multiplies memory linearly
+    """
+    hidden  = float(sample.get("hidden_dim",        128))
+    layers  = float(sample.get("num_layers",         14))
+    tokens  = float(sample.get("num_global_tokens",   0))
+    batch   = float(sample.get("batch_size",           2))
+    return hidden * hidden * layers * batch * (1.0 + 0.5 * tokens)
+
+
+# ── Daily notebook snapshot ──────────────────────────────────────────────────
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _write_notebook_snapshot(state: "HpoState") -> None:
+    """Append an HPO mid-run snapshot to today's daily notebook."""
+    today = datetime.date.today().isoformat()
+    nb_dir = _PROJECT_ROOT / "daily_notebook"
+    nb_dir.mkdir(exist_ok=True)
+    nb_path = nb_dir / f"{today}.md"
+
+    trials = state.trials
+    completed = sum(1 for t in trials if t.get("state") == "complete")
+    pruned    = sum(1 for t in trials if t.get("state") == "pruned")
+    elapsed_h = state.elapsed_sec / 3600.0
+
+    best_val = f"{state.best_value:.6f}" if state.best_value is not None else "—"
+    best_params_lines = ""
+    if state.best_params:
+        best_params_lines = "\n".join(
+            f"  - `{k}`: {v}" for k, v in state.best_params.items()
+        )
+    else:
+        best_params_lines = "  *(no completed trial yet)*"
+
+    entry = (
+        f"\n## HPO Mid-Run Snapshot — {today} ({elapsed_h:.2f}h elapsed)\n\n"
+        f"**Status:** {state.state} | **Phase:** {state.phase}\n\n"
+        f"**Progress:** Trial {state.current_trial}/{state.total_trials} "
+        f"| {completed} complete | {pruned} pruned\n\n"
+        f"**Best val loss:** {best_val}\n\n"
+        f"**Best params so far:**\n{best_params_lines}\n\n"
+        f"---\n"
+    )
+
+    with open(nb_path, "a") as f:
+        f.write(entry)
+
+
 # ── Internal helpers ─────────────────────────────────────────────────────────
 
 def _suggest_params(trial: Any, specs: list[HpoParamSpec]) -> dict:
@@ -228,6 +291,21 @@ def _build_cfg(params: dict, base_cfg: dict, epochs_per_trial: int) -> dict:
     return cfg
 
 
+def _is_out_of_memory_error(exc: BaseException) -> bool:
+    """Return True if *exc* looks like a GPU or host-memory exhaustion error."""
+    if isinstance(exc, (MemoryError, torch.OutOfMemoryError)):
+        return True
+
+    msg = str(exc).lower()
+    return any(token in msg for token in (
+        "out of memory",
+        "cuda error: out of memory",
+        "cudnn_status_alloc_failed",
+        "cublas_status_alloc_failed",
+        "hip out of memory",
+    ))
+
+
 # ── State / session ──────────────────────────────────────────────────────────
 
 @dataclass
@@ -235,6 +313,7 @@ class HpoState:
     state: str = "idle"          # idle | loading | running | stopping | stopped | completed | failed
     phase: str = "lhs"           # lhs | tpe
     current_trial: int = 0
+    current_params: Optional[dict] = None
     total_trials: int = 0
     n_lhs: int = 0
     best_value: Optional[float] = None
@@ -242,6 +321,8 @@ class HpoState:
     trials: list = field(default_factory=list)
     error_message: str = ""
     elapsed_sec: float = 0.0
+    current_epoch: int = 0
+    epochs_per_trial: int = 0
 
 
 class HpoSession:
@@ -256,6 +337,8 @@ class HpoSession:
         self._raw_data: Any  = None
         self._bundle_cache: dict[int, Any] = {}
         self._start_time: float = 0.0
+        self._notebook_snapshot_taken: bool = False
+        self._notebook_snapshot_sec: float = 9000.0  # 2.5 hours default
 
     # ── Public API ──────────────────────────────────────────────
 
@@ -265,17 +348,33 @@ class HpoSession:
 
     def get_status(self) -> dict:
         with self._lock:
+            trials = list(self._state.trials)
+            completed_trials = sum(1 for t in trials if t.get("state") == "complete")
+            pruned_trials = sum(1 for t in trials if t.get("state") == "pruned")
+            running_trials = sum(1 for t in trials if t.get("state") == "running")
+            finished_trials = completed_trials + pruned_trials
+            progress_trials = finished_trials + running_trials
+            total_trials = self._state.total_trials
+            progress_pct = (100.0 * progress_trials / total_trials) if total_trials else 0.0
             d = {
                 "state":         self._state.state,
                 "phase":         self._state.phase,
                 "current_trial": self._state.current_trial,
-                "total_trials":  self._state.total_trials,
+                "current_params": dict(self._state.current_params or {}),
+                "total_trials":  total_trials,
                 "n_lhs":         self._state.n_lhs,
                 "best_value":    self._state.best_value,
                 "best_params":   self._state.best_params,
-                "trials":        list(self._state.trials),
-                "error_message": self._state.error_message,
-                "elapsed_sec":   self._state.elapsed_sec,
+                "trials":        trials,
+                "completed_trials": completed_trials,
+                "pruned_trials": pruned_trials,
+                "running_trials": running_trials,
+                "finished_trials": finished_trials,
+                "progress_pct": progress_pct,
+                "error_message":   self._state.error_message,
+                "elapsed_sec":     self._state.elapsed_sec,
+                "current_epoch":   self._state.current_epoch,
+                "epochs_per_trial": self._state.epochs_per_trial,
             }
         return d
 
@@ -311,6 +410,8 @@ class HpoSession:
 
         n_lhs        = int(settings.get("n_lhs", 20))
         total_trials = int(settings.get("total_trials", 50))
+        self._notebook_snapshot_sec = float(settings.get("notebook_snapshot_sec", 9000.0))
+        self._notebook_snapshot_taken = False
 
         with self._lock:
             self._state = HpoState(
@@ -361,7 +462,10 @@ class HpoSession:
 
         try:
             # ── Load data once ───────────────────────────────────
-            self._set_state(state="loading")
+            self._set_state(state="loading", total_trials=total_trials, n_lhs=n_lhs)
+            with self._lock:
+                self._state.epochs_per_trial = epochs_per_trial
+                self._state.current_epoch = 0
             self._get_bundle(batch_size=4, task=task, seed=seed)
             self._set_state(state="running", phase="lhs")
 
@@ -376,8 +480,9 @@ class HpoSession:
                 ),
             )
 
-            # ── Enqueue LHS samples ──────────────────────────────
+            # ── Enqueue LHS samples (cheapest first) ─────────────
             lhs_samples = generate_lhs_samples(specs, n_lhs, seed=seed)
+            lhs_samples.sort(key=_resource_cost)
             enabled_names = {s.name for s in specs if s.enabled}
             for sample in lhs_samples:
                 study.enqueue_trial({k: v for k, v in sample.items() if k in enabled_names})
@@ -396,6 +501,7 @@ class HpoSession:
                     self._state.current_trial = trial_num + 1
                     self._state.phase = phase
                     self._state.elapsed_sec = time.time() - self._start_time
+                    self._state.current_epoch = 0
                     self._state.trials.append({
                         "number": trial_num,
                         "phase":  phase,
@@ -404,11 +510,9 @@ class HpoSession:
                         "params": {},
                     })
 
-                params  = _suggest_params(trial, specs)
-                batch_size = int(params.get("batch_size", 4))
-                bundle  = self._get_bundle(batch_size, task, seed)
-                cfg     = _build_cfg(params, base_cfg, epochs_per_trial)
-
+                params: dict[str, Any] = {}
+                bundle = None
+                cfg = None
                 model      = None
                 optimizer  = None
                 scheduler  = None
@@ -416,8 +520,18 @@ class HpoSession:
                 pruned_ev  = threading.Event()
                 best_val   = [float("inf")]
                 patience   = [0]
+                final_val: Optional[float] = None
+                prune_reason: Optional[str] = None
 
                 try:
+                    params = _suggest_params(trial, specs)
+                    batch_size = int(params.get("batch_size", 4))
+                    active_params = {k: v for k, v in params.items() if k in enabled_names}
+                    with self._lock:
+                        self._state.current_params = active_params
+                    bundle = self._get_bundle(batch_size, task, seed)
+                    cfg = _build_cfg(params, base_cfg, epochs_per_trial)
+
                     model = build_model({
                         "type": "EnhancedCFDModelWithGlobalContext",
                         "input": {
@@ -477,6 +591,12 @@ class HpoSession:
 
                         with self._lock:
                             self._state.elapsed_sec = time.time() - self._start_time
+                            self._state.current_epoch = epoch + 1
+                            # Daily notebook snapshot after configured elapsed time
+                            if (not self._notebook_snapshot_taken
+                                    and self._state.elapsed_sec >= self._notebook_snapshot_sec):
+                                _write_notebook_snapshot(self._state)
+                                self._notebook_snapshot_taken = True
 
                         return self._stop_flag.is_set()
 
@@ -499,6 +619,15 @@ class HpoSession:
 
                     final_val = best_val[0]
 
+                except Exception as exc:
+                    if not _is_out_of_memory_error(exc):
+                        raise
+
+                    pruned_ev.set()
+                    prune_reason = "oom"
+                    trial.set_user_attr("prune_reason", "oom")
+                    trial.set_user_attr("prune_message", str(exc))
+
                 finally:
                     del model, optimizer, scheduler, criterion
                     if torch.cuda.is_available():
@@ -512,6 +641,8 @@ class HpoSession:
                             rec["state"]  = "pruned" if pruned_ev.is_set() else "complete"
                             rec["value"]  = None if pruned_ev.is_set() else final_val
                             rec["params"] = rec_params
+                            if prune_reason is not None:
+                                rec["reason"] = prune_reason
                             break
 
                     if not pruned_ev.is_set():
@@ -521,6 +652,7 @@ class HpoSession:
                             self._state.best_params = dict(params)
 
                     self._state.elapsed_sec = time.time() - self._start_time
+                    self._state.current_params = None
 
                 if pruned_ev.is_set():
                     raise _optuna.exceptions.TrialPruned()
@@ -556,3 +688,4 @@ class HpoSession:
             with self._lock:
                 if self._state.state == "stopping":
                     self._state.state = "stopped"
+                self._state.current_params = None

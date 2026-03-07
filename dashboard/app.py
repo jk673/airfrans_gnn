@@ -8,8 +8,10 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -317,6 +319,18 @@ def get_gpu():
         return jsonify({"gpus": gpus})
     except Exception as e:
         return jsonify({"gpus": [], "error": str(e)})
+
+
+@app.route("/api/restart", methods=["POST"])
+def restart_server():
+    """Restart the dashboard process in-place (os.execv)."""
+    def _do_restart():
+        import time as _time
+        _time.sleep(0.3)  # allow response to be sent first
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    threading.Thread(target=_do_restart, daemon=True).start()
+    return jsonify({"status": "restarting", "message": "Dashboard is restarting…"})
 
 
 @app.route("/api/experiments/<exp_id>")
