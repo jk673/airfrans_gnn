@@ -1,6 +1,6 @@
 # AirfRANS 2D Airfoil - GNN Surrogate
 
-Auto-generated benchmark comparison. Updated: 2026-02-19 11:50:22 UTC
+Auto-generated benchmark comparison. Updated: 2026-03-02 11:19:28 UTC
 
 ## Benchmark Comparison
 
@@ -18,10 +18,250 @@ Auto-generated benchmark comparison. Updated: 2026-02-19 11:50:22 UTC
 | **EXP_0008** (scarce-h16-l14) | 0.3930 | 0.4127 | 2.7429 | 0.7370 | 0.9068 | 0.8887 |
 | **EXP_0009** (scarce-h16-l14) | 0.3826 | 0.3986 | 1.6633 | 0.6192 | 0.8902 | 0.9293 |
 | **EXP_0010** (scarce-h16-l14) | 0.4002 | 0.4218 | 1.5452 | 0.7788 | 0.9068 | 0.9128 |
+| **EXP_0011** (scarce-h128-l14) | 0.2948 | 0.3075 | 1.5456 | 0.5274 | 0.9624 | 0.9383 |
+| **EXP_0012** (scarce-h128-l14) | 0.6616 | 0.7141 | 2.5309 | 0.9676 | 0.9188 | 0.9308 |
+| **EXP_0013** (scarce-h128-l14) | 0.7136 | 0.7198 | 1.8224 | 2.2324 | 0.8406 | 0.9098 |
+| **EXP_0014** (scarce-h128-l14) | 0.9978 | 0.9653 | 2.4793 | 2.0110 | 0.1654 | 0.6451 |
 
 ---
 
 ## Experiment Details
+
+### EXP_0014 — 2026-03-02 11:19:28 UTC
+
+**Model:** scarce-h128-l14 | **Task:** scarce | **Parameters:** 3,256,580 | **Duration:** 20s
+
+| Benchmark Metric | Value |
+|--------|-------|
+| volume_rel_l2 | 0.9978 |
+| surface_rel_l2 | 0.9653 |
+| cd_relative_error | 2.4793 |
+| cl_relative_error | 2.0110 |
+| rho_d | 0.1654 |
+| rho_l | 0.6451 |
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| best_val_loss | 0.3685 |
+| best_epoch | 0 |
+| finalloss | 0.7896 |
+| final_val_loss | 0.3685 |
+| artifacts_uploaded | 0 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "task": "scarce",
+  "hidden": 128,
+  "layers": 14,
+  "scheduler": {
+    "type": "ReduceLROnPlateau",
+    "params": {
+      "scheduler_T_0": 10,
+      "scheduler_T_max": 100,
+      "scheduler_T_mult": 1,
+      "scheduler_eta_min": 0,
+      "scheduler_factor": 0.5,
+      "scheduler_gamma": 0.1,
+      "scheduler_milestones": "30,60,90",
+      "scheduler_min_lr": 1e-06,
+      "scheduler_patience": 10,
+      "scheduler_step_mode": "epoch",
+      "scheduler_step_size": 10,
+      "scheduler_warmup_end_factor": 1.0,
+      "scheduler_warmup_start_factor": 0.1,
+      "scheduler_warmup_steps": 0
+    },
+    "step_mode": "epoch",
+    "warmup_steps": 0,
+    "first_lr": 0.001,
+    "final_lr": 1e-06
+  }
+}
+```
+
+</details>
+
+---
+
+### EXP_0013 — 2026-03-02 11:18:17 UTC
+
+**Model:** scarce-h128-l14 | **Task:** scarce | **Parameters:** 3,256,580 | **Duration:** 33s
+
+| Benchmark Metric | Value |
+|--------|-------|
+| volume_rel_l2 | 0.7136 |
+| surface_rel_l2 | 0.7198 |
+| cd_relative_error | 1.8224 |
+| cl_relative_error | 2.2324 |
+| rho_d | 0.8406 |
+| rho_l | 0.9098 |
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| best_val_loss | 0.2553 |
+| best_epoch | 0 |
+| finalloss | N/A |
+| final_val_loss | 0.2553 |
+| artifacts_uploaded | 0 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "task": "scarce",
+  "hidden": 128,
+  "layers": 14,
+  "scheduler": {
+    "type": "ReduceLROnPlateau",
+    "params": {
+      "scheduler_T_0": 10,
+      "scheduler_T_max": 100,
+      "scheduler_T_mult": 1,
+      "scheduler_eta_min": 0,
+      "scheduler_factor": 0.5,
+      "scheduler_gamma": 0.1,
+      "scheduler_milestones": "30,60,90",
+      "scheduler_min_lr": 1e-06,
+      "scheduler_patience": 10,
+      "scheduler_step_mode": "epoch",
+      "scheduler_step_size": 10,
+      "scheduler_warmup_end_factor": 1.0,
+      "scheduler_warmup_start_factor": 0.1,
+      "scheduler_warmup_steps": 0
+    },
+    "step_mode": "epoch",
+    "warmup_steps": 0,
+    "first_lr": 0.001,
+    "final_lr": 1e-06
+  }
+}
+```
+
+</details>
+
+---
+
+### EXP_0012 — 2026-03-02 11:17:33 UTC
+
+**Model:** scarce-h128-l14 | **Task:** scarce | **Parameters:** 3,256,580 | **Duration:** 1m 55s
+
+| Benchmark Metric | Value |
+|--------|-------|
+| volume_rel_l2 | 0.6616 |
+| surface_rel_l2 | 0.7141 |
+| cd_relative_error | 2.5309 |
+| cl_relative_error | 0.9676 |
+| rho_d | 0.9188 |
+| rho_l | 0.9308 |
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| best_val_loss | 0.1255 |
+| best_epoch | 6 |
+| finalloss | 0.3033 |
+| final_val_loss | 0.1255 |
+| artifacts_uploaded | 0 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "task": "scarce",
+  "hidden": 128,
+  "layers": 14,
+  "scheduler": {
+    "type": "ReduceLROnPlateau",
+    "params": {
+      "scheduler_T_0": 10,
+      "scheduler_T_max": 100,
+      "scheduler_T_mult": 1,
+      "scheduler_eta_min": 0,
+      "scheduler_factor": 0.5,
+      "scheduler_gamma": 0.1,
+      "scheduler_milestones": "30,60,90",
+      "scheduler_min_lr": 1e-06,
+      "scheduler_patience": 10,
+      "scheduler_step_mode": "epoch",
+      "scheduler_step_size": 10,
+      "scheduler_warmup_end_factor": 1.0,
+      "scheduler_warmup_start_factor": 0.1,
+      "scheduler_warmup_steps": 0
+    },
+    "step_mode": "epoch",
+    "warmup_steps": 0,
+    "first_lr": 0.001,
+    "final_lr": 1e-06
+  }
+}
+```
+
+</details>
+
+---
+
+### EXP_0011 — 2026-03-02 10:52:24 UTC
+
+**Model:** scarce-h128-l14 | **Task:** scarce | **Parameters:** 3,256,580 | **Duration:** 18m 47s
+
+| Benchmark Metric | Value |
+|--------|-------|
+| volume_rel_l2 | 0.2948 |
+| surface_rel_l2 | 0.3075 |
+| cd_relative_error | 1.5456 |
+| cl_relative_error | 0.5274 |
+| rho_d | 0.9624 |
+| rho_l | 0.9383 |
+
+| Training Metric | Value |
+|--------|-------|
+| status | completed |
+| best_val_loss | 0.0471 |
+| best_epoch | 49 |
+| finalloss | 0.1808 |
+| final_val_loss | 0.0603 |
+| artifacts_uploaded | 0 |
+
+<details><summary>Config</summary>
+
+```json
+{
+  "task": "scarce",
+  "hidden": 128,
+  "layers": 14,
+  "scheduler": {
+    "type": "CosineAnnealingLR",
+    "params": {
+      "scheduler_T_0": 10,
+      "scheduler_T_max": 100,
+      "scheduler_T_mult": 1,
+      "scheduler_eta_min": 0.0,
+      "scheduler_factor": 0.5,
+      "scheduler_gamma": 0.1,
+      "scheduler_milestones": "30,60,90",
+      "scheduler_min_lr": 1e-06,
+      "scheduler_patience": 10,
+      "scheduler_step_mode": "epoch",
+      "scheduler_step_size": 10,
+      "scheduler_warmup_end_factor": 1.0,
+      "scheduler_warmup_start_factor": 0.1,
+      "scheduler_warmup_steps": 0
+    },
+    "step_mode": "epoch",
+    "warmup_steps": 0,
+    "first_lr": 0.0009997532801828658,
+    "final_lr": 0.0
+  }
+}
+```
+
+</details>
+
+---
 
 ### EXP_0010 — 2026-02-19 11:50:22 UTC
 
