@@ -482,6 +482,12 @@ class TrainingSession:
 
     def _run(self, cfg: dict):
         """Execute the full training pipeline in a background thread."""
+        model = None
+        optimizer = None
+        scheduler = None
+        criterion = None
+        bundle = None
+        data = None
         try:
             self._set_state(state="loading")
 
@@ -546,6 +552,7 @@ class TrainingSession:
                     "log_metrics": log_training_metrics,
                 },
                 on_epoch_end=self._on_epoch_end,
+                stop_event=self._stop_flag,
             )
             training_duration = time.time() - self._train_start
             self._set_state(elapsed_sec=training_duration)
@@ -584,3 +591,13 @@ class TrainingSession:
             self._set_state(state="failed", error_message=str(exc))
             import traceback
             traceback.print_exc()
+
+        finally:
+            # Release all GPU/CPU memory
+            del model, optimizer, scheduler, criterion, bundle, data
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            # If the user explicitly stopped, reset to idle so a fresh run can start
+            with self._lock:
+                if self._state.state == "stopping":
+                    self._state = TrainingState()

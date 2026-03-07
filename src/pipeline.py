@@ -231,11 +231,12 @@ def build_physics_loss(config: dict, steps_per_epoch: int) -> NavierStokesPhysic
 
 def train_one_epoch(model, loader, optimizer, criterion, device, *,
                     epoch: int = 0, global_step: int = 0,
-                    scaler=None, amp: bool = False, **_kw):
+                    scaler=None, amp: bool = False, stop_event=None, **_kw):
     return train_epoch(
         loader, model, optimizer, device, scaler,
         amp_enabled=amp, loss_fn=criterion,
         global_step_start=global_step, desc=f"train[{epoch}]",
+        stop_event=stop_event,
     )
 
 
@@ -288,7 +289,7 @@ class Trainer:
         self.amp = amp
 
     def fit(self, train_loader, val_loader, num_epochs: int, routine: dict[str, Callable],
-            on_epoch_end: Callable | None = None) -> dict:
+            on_epoch_end: Callable | None = None, stop_event=None) -> dict:
         torch.set_float32_matmul_precision("high")
         if torch.cuda.is_available():
             torch.backends.cuda.matmul.allow_tf32 = True
@@ -303,6 +304,7 @@ class Trainer:
             train_loss, train_logs, global_step = routine["train"](
                 self.model, train_loader, self.optimizer, self.criterion,
                 self.device, epoch=epoch, global_step=global_step, scaler=scaler, amp=self.amp,
+                stop_event=stop_event,
             )
             val_loss, val_logs = routine["validate"](
                 self.model, val_loader, self.criterion, self.device, amp=self.amp,

@@ -8,19 +8,19 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#1a1a2e; color:#eee; font-family:'Courier New',monospace; }
+  body { background:#ffffff; color:#212529; font-family:'Courier New',monospace; }
 
   /* ── Header ── */
-  header { padding:16px 24px; border-bottom:1px solid #333; display:flex; align-items:center; justify-content:space-between; }
+  header { padding:16px 24px; border-bottom:1px solid #e0e0e0; display:flex; align-items:center; justify-content:space-between; }
   header h1 { font-size:1.2em; }
   .tabs { display:flex; gap:4px; }
   .tabs button {
-    background:#16213e; color:#aaa; border:none; padding:8px 18px;
+    background:#e8e8e8; color:#666666; border:none; padding:8px 18px;
     cursor:pointer; font-family:inherit; font-size:0.85em; border-radius:6px 6px 0 0;
     transition: background .15s, color .15s;
   }
-  .tabs button:hover { color:#eee; }
-  .tabs button.active { background:#4ecca3; color:#1a1a2e; font-weight:bold; }
+  .tabs button:hover { color:#212529; }
+  .tabs button.active { background:#E66100; color:#ffffff; font-weight:bold; }
 
   /* ── Tab panels ── */
   .tab-panel { display:none; padding:16px; }
@@ -32,10 +32,10 @@
     max-width:1100px; margin:0 auto;
   }
   .config-group {
-    background:#16213e; border-radius:8px; padding:14px;
+    background:#f7f7f7; border-radius:8px; padding:14px; border:1px solid #e0e0e0;
   }
   .config-group h3 {
-    font-size:0.85em; color:#4ecca3; margin-bottom:10px;
+    font-size:0.85em; color:#E66100; margin-bottom:10px;
     text-transform:uppercase; letter-spacing:1px;
   }
   .config-group.wide { grid-column: 1 / -1; }
@@ -43,16 +43,16 @@
     display:flex; align-items:center; gap:8px; margin-bottom:6px;
   }
   .field-row label {
-    flex:0 0 160px; font-size:0.8em; color:#a8a8b3; text-align:right;
+    flex:0 0 160px; font-size:0.8em; color:#666666; text-align:right;
   }
   .field-row input, .field-row select, .field-row textarea {
-    flex:1; background:#0f1a2e; border:1px solid #333; color:#eee;
+    flex:1; background:#ffffff; border:1px solid #cccccc; color:#212529;
     padding:5px 8px; border-radius:4px; font-family:inherit; font-size:0.85em;
   }
   .field-row input[type="checkbox"] { flex:0; width:18px; height:18px; }
   .field-row textarea { min-height:48px; resize:vertical; }
   .field-row input:focus, .field-row select:focus, .field-row textarea:focus {
-    outline:none; border-color:#4ecca3;
+    outline:none; border-color:#E66100;
   }
 
   .btn-row { text-align:center; margin-top:16px; }
@@ -62,36 +62,36 @@
     transition: background .15s, opacity .15s;
   }
   .btn:disabled { opacity:0.4; cursor:not-allowed; }
-  .btn-start { background:#4ecca3; color:#1a1a2e; margin-right:8px; }
-  .btn-start:hover:not(:disabled) { background:#3bbb92; }
+  .btn-start { background:#E66100; color:#ffffff; margin-right:8px; }
+  .btn-start:hover:not(:disabled) { background:#cc5500; }
   .btn-stop { background:#e74c3c; color:#fff; }
   .btn-stop:hover:not(:disabled) { background:#c0392b; }
 
   /* ── Training tab ── */
   .status-bar {
-    background:#16213e; border-radius:8px; padding:12px 20px;
+    background:#f7f7f7; border-radius:8px; padding:12px 20px;
     margin-bottom:14px; display:flex; align-items:center; gap:16px;
-    flex-wrap:wrap;
+    flex-wrap:wrap; border:1px solid #e0e0e0;
   }
   .status-bar .state-badge {
     padding:4px 10px; border-radius:4px; font-size:0.8em; font-weight:bold;
     text-transform:uppercase;
   }
-  .state-idle { background:#555; color:#ccc; }
-  .state-loading { background:#f39c12; color:#1a1a2e; }
+  .state-idle { background:#e0e0e0; color:#666666; }
+  .state-loading { background:#f39c12; color:#ffffff; }
   .state-training { background:#3b82f6; color:#fff; }
   .state-benchmarking { background:#a855f7; color:#fff; }
-  .state-completed { background:#4ecca3; color:#1a1a2e; }
+  .state-completed { background:#E66100; color:#fff; }
   .state-failed { background:#e74c3c; color:#fff; }
-  .state-stopping { background:#f97316; color:#1a1a2e; }
-  .status-bar .info { font-size:0.85em; color:#a8a8b3; }
+  .state-stopping { background:#f97316; color:#ffffff; }
+  .status-bar .info { font-size:0.85em; color:#666666; }
   .error-msg { color:#e74c3c; font-size:0.85em; margin-top:4px; }
   .chart-grid {
     display:grid; grid-template-columns:repeat(3,1fr); gap:14px;
   }
-  .cb { background:#16213e; border-radius:8px; padding:14px; }
-  .cb h3 { font-size:0.85em; color:#a8a8b3; margin-bottom:8px; text-align:center; }
-  .chart-hint { text-align:center; color:#555; font-size:0.75em; margin-top:8px; }
+  .cb { background:#f7f7f7; border-radius:8px; padding:14px; border:1px solid #e0e0e0; }
+  .cb h3 { font-size:0.85em; color:#666666; margin-bottom:8px; text-align:center; }
+  .chart-hint { text-align:center; color:#aaaaaa; font-size:0.75em; margin-top:8px; }
 
   /* ── Experiments tab ── */
   .exp-table-wrap { overflow-x:auto; }
@@ -99,43 +99,43 @@
     width:100%; border-collapse:collapse; font-size:0.8em;
   }
   table.exp-table th, table.exp-table td {
-    padding:8px 10px; text-align:right; border-bottom:1px solid #222;
+    padding:8px 10px; text-align:right; border-bottom:1px solid #e0e0e0;
   }
   table.exp-table th {
-    background:#16213e; color:#4ecca3; position:sticky; top:0;
+    background:#f0f0f0; color:#E66100; position:sticky; top:0;
     text-align:right; font-size:0.8em; text-transform:uppercase;
   }
   table.exp-table th:first-child, table.exp-table td:first-child { text-align:left; }
-  table.exp-table tr:hover { background:#1e2d4a; }
-  table.exp-table tr.baseline { color:#888; }
-  table.exp-table tr.mine { color:#eee; cursor:pointer; }
-  table.exp-table tr.mine:hover { background:#1e3a5a; }
+  table.exp-table tr:hover { background:#fff3e0; }
+  table.exp-table tr.baseline { color:#999999; }
+  table.exp-table tr.mine { color:#212529; cursor:pointer; }
+  table.exp-table tr.mine:hover { background:#ffe0b2; }
 
   /* Experiment detail panel */
   .exp-detail {
-    display:none; background:#16213e; border-radius:8px;
-    padding:16px; margin-top:14px; max-width:800px;
+    display:none; background:#f7f7f7; border-radius:8px;
+    padding:16px; margin-top:14px; max-width:800px; border:1px solid #e0e0e0;
   }
   .exp-detail.visible { display:block; }
-  .exp-detail h3 { color:#4ecca3; margin-bottom:10px; font-size:0.9em; }
+  .exp-detail h3 { color:#E66100; margin-bottom:10px; font-size:0.9em; }
   .detail-grid {
     display:grid; grid-template-columns:1fr 1fr; gap:6px 20px; font-size:0.82em;
   }
-  .detail-grid .lbl { color:#888; }
-  .detail-grid .val { color:#eee; }
+  .detail-grid .lbl { color:#888888; }
+  .detail-grid .val { color:#212529; }
 
   /* ── Physics sub-group (3-column within config) ── */
   .physics-grid {
     display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;
   }
-  .physics-sub { background:#0f1a2e; border-radius:6px; padding:10px; }
-  .physics-sub h4 { font-size:0.8em; color:#a8a8b3; margin-bottom:8px; text-align:center; }
+  .physics-sub { background:#ffffff; border-radius:6px; padding:10px; border:1px solid #e0e0e0; }
+  .physics-sub h4 { font-size:0.8em; color:#666666; margin-bottom:8px; text-align:center; }
 
   /* ── GPU Monitor floating panel ── */
   .gpu-panel {
     position:fixed; bottom:16px; right:16px; width:320px;
-    background:#16213e; border:1px solid #333; border-radius:10px;
-    box-shadow:0 4px 24px rgba(0,0,0,.5); z-index:1000;
+    background:#f7f7f7; border:1px solid #e0e0e0; border-radius:10px;
+    box-shadow:0 4px 24px rgba(0,0,0,.15); z-index:1000;
     font-size:0.8em; overflow:hidden;
     transition: width .2s, height .2s;
   }
@@ -143,22 +143,22 @@
   .gpu-panel.collapsed .gpu-body { display:none; }
   .gpu-header {
     display:flex; align-items:center; justify-content:space-between;
-    padding:8px 12px; background:#0f1a2e; cursor:pointer; user-select:none;
+    padding:8px 12px; background:#e8e8e8; cursor:pointer; user-select:none;
   }
-  .gpu-header h3 { font-size:0.85em; color:#4ecca3; margin:0; }
+  .gpu-header h3 { font-size:0.85em; color:#E66100; margin:0; }
   .gpu-header .toggle-btn {
-    background:none; border:none; color:#888; cursor:pointer;
+    background:none; border:none; color:#888888; cursor:pointer;
     font-size:1.1em; font-family:inherit; padding:0 4px;
   }
-  .gpu-header .toggle-btn:hover { color:#eee; }
+  .gpu-header .toggle-btn:hover { color:#212529; }
   .gpu-body { padding:10px 12px; }
   .gpu-card { margin-bottom:8px; }
   .gpu-card:last-child { margin-bottom:0; }
-  .gpu-card .gpu-name { color:#a8a8b3; font-size:0.85em; margin-bottom:4px; }
+  .gpu-card .gpu-name { color:#666666; font-size:0.85em; margin-bottom:4px; }
   .gpu-bar-row { display:flex; align-items:center; gap:6px; margin-bottom:3px; }
-  .gpu-bar-row .bar-label { flex:0 0 40px; color:#888; font-size:0.8em; text-align:right; }
+  .gpu-bar-row .bar-label { flex:0 0 40px; color:#888888; font-size:0.8em; text-align:right; }
   .gpu-bar-outer {
-    flex:1; height:14px; background:#0f1a2e; border-radius:3px; overflow:hidden;
+    flex:1; height:14px; background:#e0e0e0; border-radius:3px; overflow:hidden;
     position:relative;
   }
   .gpu-bar-inner {
@@ -166,11 +166,11 @@
   }
   .gpu-bar-text {
     position:absolute; right:4px; top:0; line-height:14px;
-    font-size:0.75em; color:#ccc;
+    font-size:0.75em; color:#333333;
   }
-  .gpu-stats { display:flex; gap:12px; color:#888; font-size:0.78em; margin-top:2px; }
+  .gpu-stats { display:flex; gap:12px; color:#888888; font-size:0.78em; margin-top:2px; }
   .gpu-stats span { white-space:nowrap; }
-  .bar-green { background:#4ecca3; }
+  .bar-green { background:#4caf50; }
   .bar-yellow { background:#f39c12; }
   .bar-red { background:#e74c3c; }
 
@@ -179,33 +179,33 @@
   .sched-params .field-row { transition: opacity .2s, max-height .2s; overflow: hidden; }
   .sched-params .field-row.hidden-param { display: none; }
   .sched-preview-area {
-    margin-top: 12px; padding-top: 12px; border-top: 1px solid #333;
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;
   }
   .btn-preview {
-    background: #a855f7; color: #fff; padding: 6px 16px; border: none;
+    background: #E66100; color: #fff; padding: 6px 16px; border: none;
     border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.82em;
   }
-  .btn-preview:hover:not(:disabled) { background: #9333ea; }
+  .btn-preview:hover:not(:disabled) { background: #cc5500; }
   .btn-preview:disabled { opacity: 0.5; cursor: not-allowed; }
   .sched-chart-wrap {
-    margin-top: 10px; display: none; background: #0f1a2e;
-    border-radius: 6px; padding: 10px;
+    margin-top: 10px; display: none; background: #ffffff;
+    border-radius: 6px; padding: 10px; border: 1px solid #e0e0e0;
   }
   .sched-chart-wrap.visible { display: block; }
   .sched-chart-wrap h4 {
-    font-size: 0.8em; color: #a8a8b3; margin-bottom: 6px; text-align: center;
+    font-size: 0.8em; color: #666666; margin-bottom: 6px; text-align: center;
   }
   .sched-plateau-note {
-    color: #888; font-size: 0.72em; text-align: center; margin-top: 4px;
+    color: #888888; font-size: 0.72em; text-align: center; margin-top: 4px;
   }
   .sched-summary {
     display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
-    padding: 6px 8px; background: #162032; border-radius: 4px;
+    padding: 6px 8px; background: #f0f0f0; border-radius: 4px;
   }
   .sched-summary-item {
-    font-size: 0.72em; color: #a8a8b3; white-space: nowrap;
+    font-size: 0.72em; color: #666666; white-space: nowrap;
   }
-  .sched-summary-item strong { color: #e2e2f0; }
+  .sched-summary-item strong { color: #212529; }
   input[type="number"]:invalid { outline: 1px solid #e74c3c; }
   input.field-invalid { outline: 1px solid #e74c3c !important; }
 
@@ -221,8 +221,8 @@
     display:grid; grid-template-columns:1fr 1fr; gap:14px;
     max-width:1400px; margin:0 auto;
   }
-  .hpo-card { background:#16213e; border-radius:8px; padding:14px; }
-  .hpo-card h3 { font-size:0.85em; color:#4ecca3; margin-bottom:10px;
+  .hpo-card { background:#f7f7f7; border-radius:8px; padding:14px; border:1px solid #e0e0e0; }
+  .hpo-card h3 { font-size:0.85em; color:#E66100; margin-bottom:10px;
     text-transform:uppercase; letter-spacing:1px; }
   .hpo-card.full { grid-column:1/-1; }
 
@@ -231,31 +231,31 @@
     width:100%; border-collapse:collapse; font-size:0.78em;
   }
   table.ss-table th, table.ss-table td {
-    padding:5px 8px; border-bottom:1px solid #222; white-space:nowrap;
+    padding:5px 8px; border-bottom:1px solid #e0e0e0; white-space:nowrap;
   }
   table.ss-table th {
-    background:#0f1a2e; color:#4ecca3; text-align:left;
+    background:#f0f0f0; color:#E66100; text-align:left;
     position:sticky; top:0; font-size:0.78em; text-transform:uppercase;
   }
   table.ss-table td input[type="number"] {
-    width:72px; background:#0f1a2e; border:1px solid #333; color:#eee;
+    width:72px; background:#ffffff; border:1px solid #cccccc; color:#212529;
     padding:3px 5px; border-radius:3px; font-family:inherit; font-size:0.85em;
   }
   table.ss-table td input[type="checkbox"] { width:15px; height:15px; cursor:pointer; }
-  table.ss-table tr:hover { background:#1e2d4a; }
-  .cat-header td { background:#0c1428; color:#a8a8b3; font-size:0.75em; font-style:italic; }
+  table.ss-table tr:hover { background:#fff3e0; }
+  .cat-header td { background:#f5f5f5; color:#666666; font-size:0.75em; font-style:italic; }
 
   .hpo-field-row {
     display:flex; align-items:center; gap:8px; margin-bottom:6px;
   }
-  .hpo-field-row label { flex:0 0 160px; font-size:0.8em; color:#a8a8b3; text-align:right; }
+  .hpo-field-row label { flex:0 0 160px; font-size:0.8em; color:#666666; text-align:right; }
   .hpo-field-row input, .hpo-field-row select {
-    flex:1; background:#0f1a2e; border:1px solid #333; color:#eee;
+    flex:1; background:#ffffff; border:1px solid #cccccc; color:#212529;
     padding:5px 8px; border-radius:4px; font-family:inherit; font-size:0.85em;
   }
 
-  .btn-hpo-start { background:#4ecca3; color:#1a1a2e; }
-  .btn-hpo-start:hover:not(:disabled) { background:#3bbb92; }
+  .btn-hpo-start { background:#E66100; color:#ffffff; }
+  .btn-hpo-start:hover:not(:disabled) { background:#cc5500; }
   .btn-apply { background:#3b82f6; color:#fff; }
   .btn-apply:hover:not(:disabled) { background:#2563eb; }
 
@@ -263,35 +263,36 @@
     width:100%; border-collapse:collapse; font-size:0.78em;
   }
   table.trial-table th, table.trial-table td {
-    padding:5px 8px; border-bottom:1px solid #222; text-align:right;
+    padding:5px 8px; border-bottom:1px solid #e0e0e0; text-align:right;
   }
   table.trial-table th {
-    background:#0f1a2e; color:#4ecca3; text-align:right; font-size:0.78em;
+    background:#f0f0f0; color:#E66100; text-align:right; font-size:0.78em;
     text-transform:uppercase; position:sticky; top:0;
   }
   table.trial-table th:first-child, table.trial-table td:first-child { text-align:left; }
-  table.trial-table tr.lhs-row { color:#64b5f6; }
-  table.trial-table tr.tpe-row { color:#f97316; }
-  table.trial-table tr.running-row { color:#4ecca3; font-style:italic; }
-  table.trial-table tr.pruned-row { color:#555; }
+  table.trial-table tr.lhs-row { color:#1565c0; }
+  table.trial-table tr.tpe-row { color:#E65100; }
+  table.trial-table tr.running-row { color:#E66100; font-style:italic; }
+  table.trial-table tr.pruned-row { color:#aaaaaa; }
   .trial-table-wrap { overflow-y:auto; max-height:300px; }
 
   .best-params-grid {
     display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));
     gap:4px 12px; font-size:0.78em;
   }
-  .best-param-item .bp-key { color:#888; }
-  .best-param-item .bp-val { color:#eee; font-weight:bold; }
+  .best-param-item .bp-key { color:#888888; }
+  .best-param-item .bp-val { color:#212529; font-weight:bold; }
 
   .hpo-status-bar {
-    background:#16213e; border-radius:8px; padding:10px 20px;
+    background:#f7f7f7; border-radius:8px; padding:10px 20px;
     margin-bottom:14px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    border:1px solid #e0e0e0;
   }
-  .hpo-progress { font-size:0.85em; color:#a8a8b3; }
+  .hpo-progress { font-size:0.85em; color:#666666; }
   .phase-badge { padding:3px 8px; border-radius:4px; font-size:0.75em; font-weight:bold; }
   .phase-lhs  { background:#1565c0; color:#fff; }
   .phase-tpe  { background:#e65100; color:#fff; }
-  .phase-idle { background:#555; color:#ccc; }
+  .phase-idle { background:#e0e0e0; color:#666666; }
 </style>
 </head>
 <body>
@@ -372,7 +373,7 @@
       <!-- Search Space -->
       <div class="hpo-card">
         <h3>Search Space
-          <button class="btn" style="float:right;padding:3px 10px;font-size:0.75em;background:#333;color:#aaa;border:none;border-radius:4px;cursor:pointer;"
+          <button class="btn" style="float:right;padding:3px 10px;font-size:0.75em;background:#e0e0e0;color:#666666;border:none;border-radius:4px;cursor:pointer;"
                   onclick="resetHpoDefaults()">Reset Defaults</button>
         </h3>
         <div class="ss-table-wrap">
@@ -434,7 +435,7 @@
       <!-- Optimization history chart -->
       <div class="hpo-card">
         <h3>Optimization History
-          <span style="float:right;font-size:0.78em;color:#888;">
+          <span style="float:right;font-size:0.78em;color:#666666;">
             <span style="color:#64b5f6;">■</span> LHS &nbsp;
             <span style="color:#f97316;">■</span> TPE
           </span>
@@ -760,8 +761,8 @@ const zoomOpts = {
   zoom: {wheel: {enabled: true}, pinch: {enabled: true}, mode: 'xy'},
 };
 const axOpts = {
-  x: {ticks: {color: '#888'}, grid: {color: '#222'}},
-  y: {ticks: {color: '#888'}, grid: {color: '#222'}},
+  x: {ticks: {color: '#666666'}, grid: {color: '#e8e8e8'}},
+  y: {ticks: {color: '#666666'}, grid: {color: '#e8e8e8'}},
 };
 
 function initCharts() {
@@ -776,7 +777,7 @@ function initCharts() {
           {label: 'Val', data: [], borderColor: '#f97316', borderWidth: 1.5, pointRadius: 0, fill: false},
         ],
       },
-      options: {responsive: true, animation: false, plugins: {legend: {labels: {color: '#ccc'}}, zoom: zoomOpts}, scales: axOpts},
+      options: {responsive: true, animation: false, plugins: {legend: {labels: {color: '#333333'}}, zoom: zoomOpts}, scales: axOpts},
     });
     ctx.addEventListener('dblclick', () => charts[key].resetZoom());
   }
@@ -788,7 +789,7 @@ function initCharts() {
       labels: [],
       datasets: [{label: 'LR', data: [], borderColor: '#a855f7', borderWidth: 1.5, pointRadius: 0, fill: false}],
     },
-    options: {responsive: true, animation: false, plugins: {legend: {labels: {color: '#ccc'}}, zoom: zoomOpts}, scales: axOpts},
+    options: {responsive: true, animation: false, plugins: {legend: {labels: {color: '#333333'}}, zoom: zoomOpts}, scales: axOpts},
   });
   lrCtx.addEventListener('dblclick', () => charts['lr'].resetZoom());
 }
@@ -980,7 +981,7 @@ function showExpDetail(idx) {
   }
 
   // Metrics
-  grid.innerHTML += '<span class="lbl" style="grid-column:1/-1;color:#4ecca3;margin-top:8px">── Metrics ──</span><span></span>';
+  grid.innerHTML += '<span class="lbl" style="grid-column:1/-1;color:#E66100;margin-top:8px">── Metrics ──</span><span></span>';
   for (const k of METRIC_KEYS) {
     grid.innerHTML += `<span class="lbl">${escapeHtml(k)}</span><span class="val">${fmtMetric(exp[k])}</span>`;
   }
@@ -1008,7 +1009,7 @@ function barColor(pct) {
 function renderGpuCards(gpus) {
   const container = document.getElementById('gpu-cards');
   if (!gpus || gpus.length === 0) {
-    container.innerHTML = '<span style="color:#555">No GPU detected</span>';
+    container.innerHTML = '<span style="color:#aaaaaa">No GPU detected</span>';
     return;
   }
   container.innerHTML = gpus.map(g => `
@@ -1176,12 +1177,12 @@ function renderLrPreview(data) {
       responsive: true,
       animation: false,
       plugins: {
-        legend: { labels: { color: '#ccc' } },
+        legend: { labels: { color: '#333333' } },
         zoom: zoomOpts,
       },
       scales: {
-        x: { title: { display: true, text: 'Epoch', color: '#888' }, ticks: { color: '#888' }, grid: { color: '#222' } },
-        y: { title: { display: true, text: 'LR', color: '#888' }, ticks: { color: '#888' }, grid: { color: '#222' } },
+        x: { title: { display: true, text: 'Epoch', color: '#666666' }, ticks: { color: '#666666' }, grid: { color: '#e8e8e8' } },
+        y: { title: { display: true, text: 'LR', color: '#666666' }, ticks: { color: '#666666' }, grid: { color: '#e8e8e8' } },
       },
     },
   });
@@ -1225,12 +1226,12 @@ function renderSearchSpaceTable(specs) {
       tr.innerHTML = `
         <td><input type="checkbox" id="hpo-en-${spec.name}" ${spec.enabled ? 'checked' : ''}></td>
         <td><code>${spec.name}</code></td>
-        <td style="color:#a8a8b3">${spec.category}</td>
-        <td style="color:#a8a8b3">${spec.type}</td>
-        <td>${isNumeric ? `<input type="number" id="hpo-min-${spec.name}" value="${spec.min}" step="any">` : '<span style="color:#555">—</span>'}</td>
-        <td>${isNumeric ? `<input type="number" id="hpo-max-${spec.name}" value="${spec.max}" step="any">` : '<span style="color:#555">—</span>'}</td>
-        <td>${(isNumeric && spec.step > 0) ? `<input type="number" id="hpo-step-${spec.name}" value="${spec.step}" step="any">` : '<span style="color:#555">—</span>'}</td>
-        <td>${spec.log_scale ? '<span style="color:#4ecca3">✓</span>' : '<span style="color:#555">—</span>'}</td>
+        <td style="color:#666666">${spec.category}</td>
+        <td style="color:#666666">${spec.type}</td>
+        <td>${isNumeric ? `<input type="number" id="hpo-min-${spec.name}" value="${spec.min}" step="any">` : '<span style="color:#aaaaaa">—</span>'}</td>
+        <td>${isNumeric ? `<input type="number" id="hpo-max-${spec.name}" value="${spec.max}" step="any">` : '<span style="color:#aaaaaa">—</span>'}</td>
+        <td>${(isNumeric && spec.step > 0) ? `<input type="number" id="hpo-step-${spec.name}" value="${spec.step}" step="any">` : '<span style="color:#aaaaaa">—</span>'}</td>
+        <td>${spec.log_scale ? '<span style="color:#E66100">✓</span>' : '<span style="color:#aaaaaa">—</span>'}</td>
       `;
       tbody.appendChild(tr);
     }
@@ -1265,14 +1266,14 @@ function initHpoCharts() {
     data: { datasets: [
       { label: 'LHS',   data: [], backgroundColor: '#64b5f6', pointRadius: 5 },
       { label: 'TPE',   data: [], backgroundColor: '#f97316', pointRadius: 5 },
-      { label: 'Pruned',data: [], backgroundColor: '#555',    pointRadius: 3 },
+      { label: 'Pruned',data: [], backgroundColor: '#cccccc', pointRadius: 3 },
     ]},
     options: {
       responsive: true, animation: false,
-      plugins: { legend: { labels: { color: '#ccc' } } },
+      plugins: { legend: { labels: { color: '#333333' } } },
       scales: {
-        x: { title: { display: true, text: 'Trial #', color: '#888' }, ticks: { color:'#888' }, grid: { color:'#222' } },
-        y: { title: { display: true, text: 'Val Loss', color: '#888' }, ticks: { color:'#888' }, grid: { color:'#222' } },
+        x: { title: { display: true, text: 'Trial #', color: '#666666' }, ticks: { color:'#666666' }, grid: { color:'#e8e8e8' } },
+        y: { title: { display: true, text: 'Val Loss', color: '#666666' }, ticks: { color:'#666666' }, grid: { color:'#e8e8e8' } },
       },
     },
   });
@@ -1281,14 +1282,14 @@ function initHpoCharts() {
   hpoConvergeChart = new Chart(cCtx, {
     type: 'line',
     data: { datasets: [
-      { label: 'Best Value', data: [], borderColor: '#4ecca3', borderWidth: 2, pointRadius: 0, fill: false },
+      { label: 'Best Value', data: [], borderColor: '#E66100', borderWidth: 2, pointRadius: 0, fill: false },
     ]},
     options: {
       responsive: true, animation: false,
-      plugins: { legend: { labels: { color: '#ccc' } } },
+      plugins: { legend: { labels: { color: '#333333' } } },
       scales: {
-        x: { title: { display: true, text: 'Trial #', color: '#888' }, ticks: { color:'#888' }, grid: { color:'#222' } },
-        y: { title: { display: true, text: 'Best Loss', color: '#888' }, ticks: { color:'#888' }, grid: { color:'#222' } },
+        x: { title: { display: true, text: 'Trial #', color: '#666666' }, ticks: { color:'#666666' }, grid: { color:'#e8e8e8' } },
+        y: { title: { display: true, text: 'Best Loss', color: '#666666' }, ticks: { color:'#666666' }, grid: { color:'#e8e8e8' } },
       },
     },
   });
@@ -1355,7 +1356,7 @@ function renderTrialTable(trials) {
       <td><span class="phase-badge phase-${t.phase}">${t.phase.toUpperCase()}</span></td>
       <td>${t.state}</td>
       <td style="font-family:monospace">${valStr}</td>
-      <td style="color:#a8a8b3;font-size:0.75em">${escapeHtml(paramStr)}</td>
+      <td style="color:#666666;font-size:0.75em">${escapeHtml(paramStr)}</td>
     `;
     tbody.appendChild(tr);
   }
