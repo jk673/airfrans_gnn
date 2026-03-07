@@ -21,6 +21,7 @@ from dashboard.runner import (
     TrainingSession, build_lr_scheduler, validate_scheduler_config,
     simulate_lr_schedule, flatten_scheduler_config,
 )
+from dashboard.hpo import HpoSession, DEFAULT_SEARCH_SPACE
 from src.benchmark import (
     FLOW_GLIDE_METRIC_KEYS,
     _load_flow_glide_baselines,
@@ -28,7 +29,8 @@ from src.benchmark import (
 )
 
 app = Flask(__name__, template_folder=str(Path(__file__).parent / "templates"))
-session = TrainingSession()
+session     = TrainingSession()
+hpo_session = HpoSession()
 
 RESULTS_DIR = PROJECT_ROOT / "experiments" / "results"
 
@@ -324,6 +326,49 @@ def get_experiment(exp_id):
         return jsonify({"error": "Not found"}), 404
     with open(json_path) as f:
         return jsonify(json.load(f))
+
+
+# -----------------------------------------------------------------------
+# HPO routes
+# -----------------------------------------------------------------------
+
+@app.route("/api/hpo/search-space")
+def hpo_search_space():
+    return jsonify([spec.to_dict() for spec in DEFAULT_SEARCH_SPACE])
+
+
+@app.route("/api/hpo/start", methods=["POST"])
+def hpo_start():
+    if hpo_session.is_running:
+        status = hpo_session.get_status()
+        return jsonify({
+            "status": "error",
+            "message": f"HPO already running (trial {status['current_trial']}/{status['total_trials']})",
+        }), 409
+    body = request.get_json(force=True) or {}
+    search_space = body.get("search_space", [spec.to_dict() for spec in DEFAULT_SEARCH_SPACE])
+    settings     = body.get("settings", {})
+    try:
+        hpo_session.start(search_space, settings)
+        return jsonify({"status": "started"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+
+@app.route("/api/hpo/stop", methods=["POST"])
+def hpo_stop():
+    if not hpo_session.is_running:
+        return jsonify({"status": "error", "message": "No HPO running"}), 400
+    hpo_session.request_stop()
+    return jsonify({"status": "stopping", "message": "Will stop after current trial."})
+
+
+@app.route("/api/hpo/status")
+def hpo_status():
+    status = hpo_session.get_status()
+    if status.get("best_value") == float("inf"):
+        status["best_value"] = None
+    return jsonify(status)
 
 
 # -----------------------------------------------------------------------

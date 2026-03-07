@@ -215,6 +215,83 @@
     .physics-grid { grid-template-columns:1fr; }
     .gpu-panel { width:260px; }
   }
+
+  /* ── HPO tab ── */
+  .hpo-layout {
+    display:grid; grid-template-columns:1fr 1fr; gap:14px;
+    max-width:1400px; margin:0 auto;
+  }
+  .hpo-card { background:#16213e; border-radius:8px; padding:14px; }
+  .hpo-card h3 { font-size:0.85em; color:#4ecca3; margin-bottom:10px;
+    text-transform:uppercase; letter-spacing:1px; }
+  .hpo-card.full { grid-column:1/-1; }
+
+  .ss-table-wrap { overflow-x:auto; max-height:420px; overflow-y:auto; }
+  table.ss-table {
+    width:100%; border-collapse:collapse; font-size:0.78em;
+  }
+  table.ss-table th, table.ss-table td {
+    padding:5px 8px; border-bottom:1px solid #222; white-space:nowrap;
+  }
+  table.ss-table th {
+    background:#0f1a2e; color:#4ecca3; text-align:left;
+    position:sticky; top:0; font-size:0.78em; text-transform:uppercase;
+  }
+  table.ss-table td input[type="number"] {
+    width:72px; background:#0f1a2e; border:1px solid #333; color:#eee;
+    padding:3px 5px; border-radius:3px; font-family:inherit; font-size:0.85em;
+  }
+  table.ss-table td input[type="checkbox"] { width:15px; height:15px; cursor:pointer; }
+  table.ss-table tr:hover { background:#1e2d4a; }
+  .cat-header td { background:#0c1428; color:#a8a8b3; font-size:0.75em; font-style:italic; }
+
+  .hpo-field-row {
+    display:flex; align-items:center; gap:8px; margin-bottom:6px;
+  }
+  .hpo-field-row label { flex:0 0 160px; font-size:0.8em; color:#a8a8b3; text-align:right; }
+  .hpo-field-row input, .hpo-field-row select {
+    flex:1; background:#0f1a2e; border:1px solid #333; color:#eee;
+    padding:5px 8px; border-radius:4px; font-family:inherit; font-size:0.85em;
+  }
+
+  .btn-hpo-start { background:#4ecca3; color:#1a1a2e; }
+  .btn-hpo-start:hover:not(:disabled) { background:#3bbb92; }
+  .btn-apply { background:#3b82f6; color:#fff; }
+  .btn-apply:hover:not(:disabled) { background:#2563eb; }
+
+  table.trial-table {
+    width:100%; border-collapse:collapse; font-size:0.78em;
+  }
+  table.trial-table th, table.trial-table td {
+    padding:5px 8px; border-bottom:1px solid #222; text-align:right;
+  }
+  table.trial-table th {
+    background:#0f1a2e; color:#4ecca3; text-align:right; font-size:0.78em;
+    text-transform:uppercase; position:sticky; top:0;
+  }
+  table.trial-table th:first-child, table.trial-table td:first-child { text-align:left; }
+  table.trial-table tr.lhs-row { color:#64b5f6; }
+  table.trial-table tr.tpe-row { color:#f97316; }
+  table.trial-table tr.running-row { color:#4ecca3; font-style:italic; }
+  table.trial-table tr.pruned-row { color:#555; }
+  .trial-table-wrap { overflow-y:auto; max-height:300px; }
+
+  .best-params-grid {
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));
+    gap:4px 12px; font-size:0.78em;
+  }
+  .best-param-item .bp-key { color:#888; }
+  .best-param-item .bp-val { color:#eee; font-weight:bold; }
+
+  .hpo-status-bar {
+    background:#16213e; border-radius:8px; padding:10px 20px;
+    margin-bottom:14px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  }
+  .hpo-progress { font-size:0.85em; color:#a8a8b3; }
+  .phase-badge { padding:3px 8px; border-radius:4px; font-size:0.75em; font-weight:bold; }
+  .phase-lhs  { background:#1565c0; color:#fff; }
+  .phase-tpe  { background:#e65100; color:#fff; }
+  .phase-idle { background:#555; color:#ccc; }
 </style>
 </head>
 <body>
@@ -225,6 +302,7 @@
     <button class="active" onclick="switchTab('config')">Config</button>
     <button onclick="switchTab('training')">Training</button>
     <button onclick="switchTab('experiments')">Experiments</button>
+    <button onclick="switchTab('hpo')">HPO</button>
   </div>
 </header>
 
@@ -275,6 +353,123 @@
     <div class="detail-grid" id="exp-detail-grid"></div>
   </div>
 </div>
+
+<!-- ═══════════════════════ HPO TAB ═══════════════════════ -->
+<div id="tab-hpo" class="tab-panel">
+
+  <!-- Status bar -->
+  <div class="hpo-status-bar">
+    <span class="state-badge state-idle" id="hpo-state-badge">IDLE</span>
+    <span class="phase-badge phase-idle" id="hpo-phase-badge">—</span>
+    <span class="hpo-progress" id="hpo-progress-info">No HPO running</span>
+  </div>
+
+  <div class="hpo-layout">
+
+    <!-- ── Left column: Search Space + Settings ── -->
+    <div style="display:flex;flex-direction:column;gap:14px;">
+
+      <!-- Search Space -->
+      <div class="hpo-card">
+        <h3>Search Space
+          <button class="btn" style="float:right;padding:3px 10px;font-size:0.75em;background:#333;color:#aaa;border:none;border-radius:4px;cursor:pointer;"
+                  onclick="resetHpoDefaults()">Reset Defaults</button>
+        </h3>
+        <div class="ss-table-wrap">
+          <table class="ss-table" id="ss-table">
+            <thead><tr>
+              <th></th><th>Name</th><th>Category</th><th>Type</th>
+              <th>Min</th><th>Max</th><th>Step</th><th>Log</th>
+            </tr></thead>
+            <tbody id="ss-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Study Settings -->
+      <div class="hpo-card">
+        <h3>Study Settings</h3>
+        <div class="hpo-field-row">
+          <label>LHS Samples</label>
+          <input type="number" id="hpo-n-lhs" value="20" min="1" max="100">
+        </div>
+        <div class="hpo-field-row">
+          <label>Total Trials</label>
+          <input type="number" id="hpo-total-trials" value="50" min="1" max="500">
+        </div>
+        <div class="hpo-field-row">
+          <label>Epochs / Trial</label>
+          <input type="number" id="hpo-epochs-per-trial" value="30" min="1" max="500">
+        </div>
+        <div class="hpo-field-row">
+          <label>Pruning Patience</label>
+          <input type="number" id="hpo-pruning-patience" value="10" min="1" max="100">
+        </div>
+        <div class="hpo-field-row">
+          <label>Task</label>
+          <select id="hpo-task">
+            <option value="scarce" selected>scarce</option>
+            <option value="full">full</option>
+          </select>
+        </div>
+        <div class="hpo-field-row">
+          <label>Device</label>
+          <select id="hpo-device">
+            <option value="cuda" selected>cuda</option>
+            <option value="cpu">cpu</option>
+          </select>
+        </div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn btn-hpo-start" id="btn-hpo-start" onclick="startHpo()">Start HPO</button>
+          <button class="btn btn-stop" id="btn-hpo-stop" onclick="stopHpo()" disabled style="margin-left:8px;">Stop</button>
+          <button class="btn btn-apply" id="btn-apply-best" onclick="applyBestToConfig()" disabled style="margin-left:8px;">Apply Best to Config</button>
+        </div>
+        <p id="hpo-error" style="display:none;color:#e74c3c;font-size:0.82em;margin:6px 0 0 0;"></p>
+      </div>
+    </div>
+
+    <!-- ── Right column: Charts + Results ── -->
+    <div style="display:flex;flex-direction:column;gap:14px;">
+
+      <!-- Optimization history chart -->
+      <div class="hpo-card">
+        <h3>Optimization History
+          <span style="float:right;font-size:0.78em;color:#888;">
+            <span style="color:#64b5f6;">■</span> LHS &nbsp;
+            <span style="color:#f97316;">■</span> TPE
+          </span>
+        </h3>
+        <canvas id="c-hpo-history" height="120"></canvas>
+      </div>
+
+      <!-- Convergence chart -->
+      <div class="hpo-card">
+        <h3>Best Value Convergence</h3>
+        <canvas id="c-hpo-convergence" height="100"></canvas>
+      </div>
+    </div>
+
+    <!-- ── Full-width: Trial table ── -->
+    <div class="hpo-card full">
+      <h3>Trials</h3>
+      <div class="trial-table-wrap">
+        <table class="trial-table">
+          <thead><tr>
+            <th>#</th><th>Phase</th><th>State</th><th>Value</th><th>Key Params</th>
+          </tr></thead>
+          <tbody id="trial-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Full-width: Best params ── -->
+    <div class="hpo-card full" id="hpo-best-card" style="display:none;">
+      <h3>Best Parameters</h3>
+      <div class="best-params-grid" id="hpo-best-grid"></div>
+    </div>
+
+  </div><!-- /.hpo-layout -->
+</div><!-- /#tab-hpo -->
 
 <!-- ═══════════════════════ GPU MONITOR (floating) ═══════════════════════ -->
 <div class="gpu-panel" id="gpu-panel">
@@ -994,14 +1189,362 @@ function renderLrPreview(data) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// HPO — search space, charts, polling
+// ═══════════════════════════════════════════════════════════════
+let hpoSearchSpace = [];          // array of HpoParamSpec dicts
+let hpoHistoryChart  = null;
+let hpoConvergeChart = null;
+let hpoLastState = 'idle';
+
+// ── Load search space from /api/hpo/search-space ──────────────
+async function loadHpoSearchSpace() {
+  try {
+    const res  = await fetch('/api/hpo/search-space');
+    hpoSearchSpace = await res.json();
+    renderSearchSpaceTable(hpoSearchSpace);
+  } catch (e) { /* silent */ }
+}
+
+function renderSearchSpaceTable(specs) {
+  const tbody = document.getElementById('ss-tbody');
+  tbody.innerHTML = '';
+
+  // Group by category
+  const categories = [...new Set(specs.map(s => s.category))];
+  for (const cat of categories) {
+    // Category header row
+    const header = document.createElement('tr');
+    header.className = 'cat-header';
+    header.innerHTML = `<td colspan="8">${cat}</td>`;
+    tbody.appendChild(header);
+
+    for (const spec of specs.filter(s => s.category === cat)) {
+      const tr = document.createElement('tr');
+      const isNumeric = spec.type === 'int' || spec.type === 'float';
+
+      tr.innerHTML = `
+        <td><input type="checkbox" id="hpo-en-${spec.name}" ${spec.enabled ? 'checked' : ''}></td>
+        <td><code>${spec.name}</code></td>
+        <td style="color:#a8a8b3">${spec.category}</td>
+        <td style="color:#a8a8b3">${spec.type}</td>
+        <td>${isNumeric ? `<input type="number" id="hpo-min-${spec.name}" value="${spec.min}" step="any">` : '<span style="color:#555">—</span>'}</td>
+        <td>${isNumeric ? `<input type="number" id="hpo-max-${spec.name}" value="${spec.max}" step="any">` : '<span style="color:#555">—</span>'}</td>
+        <td>${(isNumeric && spec.step > 0) ? `<input type="number" id="hpo-step-${spec.name}" value="${spec.step}" step="any">` : '<span style="color:#555">—</span>'}</td>
+        <td>${spec.log_scale ? '<span style="color:#4ecca3">✓</span>' : '<span style="color:#555">—</span>'}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+}
+
+function resetHpoDefaults() {
+  loadHpoSearchSpace();
+}
+
+function collectHpoSearchSpace() {
+  return hpoSearchSpace.map(spec => {
+    const en = document.getElementById(`hpo-en-${spec.name}`);
+    const minEl  = document.getElementById(`hpo-min-${spec.name}`);
+    const maxEl  = document.getElementById(`hpo-max-${spec.name}`);
+    const stepEl = document.getElementById(`hpo-step-${spec.name}`);
+    return {
+      ...spec,
+      enabled: en ? en.checked : spec.enabled,
+      min:  minEl  ? parseFloat(minEl.value)  : spec.min,
+      max:  maxEl  ? parseFloat(maxEl.value)  : spec.max,
+      step: stepEl ? parseFloat(stepEl.value) : spec.step,
+    };
+  });
+}
+
+// ── Charts ────────────────────────────────────────────────────
+function initHpoCharts() {
+  const hCtx = document.getElementById('c-hpo-history');
+  hpoHistoryChart = new Chart(hCtx, {
+    type: 'scatter',
+    data: { datasets: [
+      { label: 'LHS',   data: [], backgroundColor: '#64b5f6', pointRadius: 5 },
+      { label: 'TPE',   data: [], backgroundColor: '#f97316', pointRadius: 5 },
+      { label: 'Pruned',data: [], backgroundColor: '#555',    pointRadius: 3 },
+    ]},
+    options: {
+      responsive: true, animation: false,
+      plugins: { legend: { labels: { color: '#ccc' } } },
+      scales: {
+        x: { title: { display: true, text: 'Trial #', color: '#888' }, ticks: { color:'#888' }, grid: { color:'#222' } },
+        y: { title: { display: true, text: 'Val Loss', color: '#888' }, ticks: { color:'#888' }, grid: { color:'#222' } },
+      },
+    },
+  });
+
+  const cCtx = document.getElementById('c-hpo-convergence');
+  hpoConvergeChart = new Chart(cCtx, {
+    type: 'line',
+    data: { datasets: [
+      { label: 'Best Value', data: [], borderColor: '#4ecca3', borderWidth: 2, pointRadius: 0, fill: false },
+    ]},
+    options: {
+      responsive: true, animation: false,
+      plugins: { legend: { labels: { color: '#ccc' } } },
+      scales: {
+        x: { title: { display: true, text: 'Trial #', color: '#888' }, ticks: { color:'#888' }, grid: { color:'#222' } },
+        y: { title: { display: true, text: 'Best Loss', color: '#888' }, ticks: { color:'#888' }, grid: { color:'#222' } },
+      },
+    },
+  });
+}
+
+function updateHpoCharts(trials) {
+  if (!hpoHistoryChart || !hpoConvergeChart) return;
+
+  const lhsData    = [];
+  const tpeData    = [];
+  const prunedData = [];
+  const bestLine   = [];
+  let best = Infinity;
+
+  for (const t of trials) {
+    const x = t.number + 1;
+    const y = t.value;
+    if (t.state === 'pruned' || y == null) {
+      prunedData.push({ x, y: 0 });
+    } else {
+      const pt = { x, y };
+      if (t.phase === 'lhs') lhsData.push(pt);
+      else tpeData.push(pt);
+
+      if (y < best) best = y;
+    }
+    bestLine.push({ x, y: best === Infinity ? null : best });
+  }
+
+  hpoHistoryChart.data.datasets[0].data = lhsData;
+  hpoHistoryChart.data.datasets[1].data = tpeData;
+  hpoHistoryChart.data.datasets[2].data = prunedData;
+  hpoHistoryChart.update('none');
+
+  hpoConvergeChart.data.datasets[0].data = bestLine.filter(p => p.y != null);
+  hpoConvergeChart.update('none');
+}
+
+// ── Trial table ───────────────────────────────────────────────
+function renderTrialTable(trials) {
+  const tbody = document.getElementById('trial-tbody');
+  tbody.innerHTML = '';
+
+  // Show most recent first
+  for (const t of [...trials].reverse()) {
+    const tr = document.createElement('tr');
+    const cls = t.state === 'running'  ? 'running-row'
+              : t.state === 'pruned'   ? 'pruned-row'
+              : t.phase === 'lhs'      ? 'lhs-row'
+              : 'tpe-row';
+    tr.className = cls;
+
+    const valStr = t.value != null ? t.value.toFixed(6) : (t.state === 'pruned' ? 'pruned' : '…');
+
+    // Show top 3 params
+    const paramEntries = Object.entries(t.params || {}).slice(0, 3);
+    const paramStr = paramEntries.map(([k, v]) => {
+      const vs = typeof v === 'number' ? (v < 0.01 ? v.toExponential(1) : v.toPrecision(3)) : String(v);
+      return `${k}=${vs}`;
+    }).join(' · ');
+
+    tr.innerHTML = `
+      <td>${t.number + 1}</td>
+      <td><span class="phase-badge phase-${t.phase}">${t.phase.toUpperCase()}</span></td>
+      <td>${t.state}</td>
+      <td style="font-family:monospace">${valStr}</td>
+      <td style="color:#a8a8b3;font-size:0.75em">${escapeHtml(paramStr)}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+// ── Best params card ──────────────────────────────────────────
+function renderBestParams(params) {
+  const card = document.getElementById('hpo-best-card');
+  const grid = document.getElementById('hpo-best-grid');
+  if (!params || Object.keys(params).length === 0) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = 'block';
+  grid.innerHTML = '';
+  for (const [k, v] of Object.entries(params)) {
+    const vs = typeof v === 'number' ? (v < 0.01 ? v.toExponential(3) : String(v)) : String(v);
+    grid.innerHTML += `<div class="best-param-item"><span class="bp-key">${escapeHtml(k)}: </span><span class="bp-val">${escapeHtml(vs)}</span></div>`;
+  }
+}
+
+// ── Status bar update ─────────────────────────────────────────
+function updateHpoStatusBar(data) {
+  const badge      = document.getElementById('hpo-state-badge');
+  const phaseBadge = document.getElementById('hpo-phase-badge');
+  const progress   = document.getElementById('hpo-progress-info');
+  const btnStart   = document.getElementById('btn-hpo-start');
+  const btnStop    = document.getElementById('btn-hpo-stop');
+  const btnApply   = document.getElementById('btn-apply-best');
+
+  const state = data.state || 'idle';
+  badge.textContent = state.toUpperCase();
+  badge.className   = 'state-badge state-' + state;
+
+  const running = ['loading', 'running', 'stopping'].includes(state);
+  btnStart.disabled = running;
+  btnStop.disabled  = !running;
+  btnApply.disabled = !data.best_params;
+
+  const phase = data.phase || 'lhs';
+  if (running || state === 'completed') {
+    phaseBadge.textContent = phase.toUpperCase();
+    phaseBadge.className   = 'phase-badge phase-' + phase;
+  } else {
+    phaseBadge.textContent = '—';
+    phaseBadge.className   = 'phase-badge phase-idle';
+  }
+
+  if (state === 'idle' || state === 'stopped') {
+    progress.textContent = 'No HPO running';
+  } else if (state === 'loading') {
+    progress.textContent = 'Loading data…';
+  } else if (running || state === 'completed') {
+    const cur  = data.current_trial || 0;
+    const tot  = data.total_trials  || 0;
+    const best = data.best_value != null ? data.best_value.toFixed(6) : '—';
+    const ela  = data.elapsed_sec  ? formatTime(data.elapsed_sec) : '0s';
+    progress.textContent = `Trial ${cur}/${tot} | Best: ${best} | ${ela}`;
+  } else if (state === 'failed') {
+    progress.textContent = 'HPO failed: ' + (data.error_message || '');
+  }
+}
+
+// ── Polling ───────────────────────────────────────────────────
+async function pollHpoStatus() {
+  try {
+    const res  = await fetch('/api/hpo/status');
+    const data = await res.json();
+    updateHpoStatusBar(data);
+    renderTrialTable(data.trials || []);
+    updateHpoCharts(data.trials || []);
+    renderBestParams(data.best_params);
+  } catch (e) { /* silent */ }
+}
+
+// ── Start / Stop ──────────────────────────────────────────────
+async function startHpo() {
+  const errEl = document.getElementById('hpo-error');
+  errEl.style.display = 'none';
+
+  const searchSpace = collectHpoSearchSpace();
+  const settings = {
+    n_lhs:            parseInt(document.getElementById('hpo-n-lhs').value, 10),
+    total_trials:     parseInt(document.getElementById('hpo-total-trials').value, 10),
+    epochs_per_trial: parseInt(document.getElementById('hpo-epochs-per-trial').value, 10),
+    pruning_patience: parseInt(document.getElementById('hpo-pruning-patience').value, 10),
+    task:             document.getElementById('hpo-task').value,
+    device:           document.getElementById('hpo-device').value,
+  };
+
+  const btnStart = document.getElementById('btn-hpo-start');
+  btnStart.disabled = true;
+
+  try {
+    const res  = await fetch('/api/hpo/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ search_space: searchSpace, settings }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = '⚠ ' + (data.message || 'Failed to start');
+      errEl.style.display = 'block';
+      btnStart.disabled = false;
+    }
+  } catch (e) {
+    errEl.textContent = '⚠ Error: ' + e.message;
+    errEl.style.display = 'block';
+    btnStart.disabled = false;
+  }
+}
+
+async function stopHpo() {
+  const res  = await fetch('/api/hpo/stop', { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) alert(data.message || 'Failed to stop HPO');
+}
+
+// ── Apply best to Config tab ──────────────────────────────────
+async function applyBestToConfig() {
+  const res  = await fetch('/api/hpo/status');
+  const data = await res.json();
+  const best = data.best_params;
+  if (!best) return;
+
+  // Map best param names to Config tab field IDs
+  const PARAM_MAP = {
+    hidden_dim:        'cfg-model.hidden_dim',
+    num_layers:        'cfg-model.num_layers',
+    dropout:           'cfg-model.dropout',
+    num_global_tokens: 'cfg-model.num_global_tokens',
+    lr:                'cfg-optimizer.lr',
+    weight_decay:      'cfg-optimizer.weight_decay',
+    scheduler_type:    'cfg-scheduler.scheduler_type',
+    scheduler_T_max:   'cfg-scheduler.scheduler_T_max',
+    scheduler_gamma:   'cfg-scheduler.scheduler_gamma',
+    batch_size:        'cfg-data.batch_size',
+    amp:               'cfg-training.amp',
+  };
+
+  let applied = 0;
+  for (const [hpoKey, cfgId] of Object.entries(PARAM_MAP)) {
+    if (!(hpoKey in best)) continue;
+    const el = document.getElementById(cfgId);
+    if (!el) continue;
+    if (el.type === 'checkbox') el.checked = !!best[hpoKey];
+    else el.value = best[hpoKey];
+    applied++;
+  }
+
+  // Physics params
+  const physMap = {
+    cont_weight:      'cfg-physics.continuity.weight',
+    cont_target:      'cfg-physics.continuity.target',
+    mom_weight:       'cfg-physics.momentum.weight',
+    mom_target:       'cfg-physics.momentum.target',
+    bc_weight:        'cfg-physics.bc.weight',
+    ramp_start_epoch: 'cfg-physics.continuity.ramp_start_epoch',
+    ramp_epochs:      'cfg-physics.continuity.ramp_epochs',
+  };
+  for (const [hpoKey, cfgId] of Object.entries(physMap)) {
+    if (!(hpoKey in best)) continue;
+    const el = document.getElementById(cfgId);
+    if (!el) continue;
+    el.value = best[hpoKey];
+    applied++;
+  }
+
+  // Trigger scheduler param visibility refresh
+  if (typeof updateSchedulerParams === 'function') updateSchedulerParams();
+
+  // Switch to config tab
+  switchTab('config');
+  alert(`Applied ${applied} best parameter(s) to Config tab.`);
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
 loadConfig();
 initCharts();
+initHpoCharts();
+loadHpoSearchSpace();
 pollStatus();
 pollGpu();
+pollHpoStatus();
 setInterval(pollStatus, 3000);
 setInterval(pollGpu, 2000);
+setInterval(pollHpoStatus, 3000);
 </script>
 </body>
 </html>
