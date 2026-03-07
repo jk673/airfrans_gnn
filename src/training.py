@@ -141,13 +141,15 @@ def run_epoch(loader, model, device, *, amp_enabled=False, desc='val', loss_fn=N
 def train_epoch(loader, model, optim, device, scaler, *,
                 amp_enabled=False, desc='train', loss_fn=None,
                 global_step_start=0, scheduler=None,
-                scheduler_step_mode="epoch"):
+                scheduler_step_mode="epoch", stop_event=None):
     model.train()
     acc = _new_accumulators()
     global_step = global_step_start
     pbar = tqdm(total=len(loader), desc=desc, leave=False)
 
     for batch in loader:
+        if stop_event is not None and stop_event.is_set():
+            break
         try:
             if batch is None:
                 global_step += 1
