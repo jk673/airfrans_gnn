@@ -104,8 +104,22 @@ def convert_to_pyg(
     train_prepped = [enrich_edge_features(_prep_graph_for_norm(g)) for g in data.train_graphs]
     val_prepped = [enrich_edge_features(_prep_graph_for_norm(g)) for g in data.val_graphs] if data.val_graphs else []
 
-    X_train = torch.cat([d.x for d in train_prepped if hasattr(d, "x") and d.x is not None], dim=0)
-    Y_train = torch.cat([d.y for d in train_prepped if hasattr(d, "y") and d.y is not None], dim=0)
+    x_list = [d.x for d in train_prepped if hasattr(d, "x") and d.x is not None]
+    y_list = [d.y for d in train_prepped if hasattr(d, "y") and d.y is not None]
+    if not x_list:
+        raise RuntimeError(
+            f"No training graphs have node features (x). "
+            f"Found {len(data.train_graphs)} graphs under task='{data.task}'. "
+            "Check that prebuilt_edges_v2/ exists for this task."
+        )
+    if not y_list:
+        raise RuntimeError(
+            f"No training graphs have target labels (y). "
+            f"Found {len(data.train_graphs)} graphs under task='{data.task}'. "
+            "Check that the prebuilt graphs include ground-truth labels."
+        )
+    X_train = torch.cat(x_list, dim=0)
+    Y_train = torch.cat(y_list, dim=0)
 
     x_scaler = StandardScaler().fit(X_train)
     y_scaler = StandardScaler().fit(Y_train)
