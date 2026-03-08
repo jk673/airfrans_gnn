@@ -277,16 +277,56 @@ def weighted_laplacian(
     Lref: float = 1.0,
 ) -> torch.Tensor:
     """
-    Simple scalar Laplacian via divergence of gradient (2-pass weighted gradient).
-    Δf ≈ ∂/∂x(gx) + ∂/∂y(gy)  using the same weighted scheme.
+    Direct single-pass graph Laplacian (replaces two-pass grad-of-grad).
+    Δf(i) ≈ 2 * sum_j w_ij (f_j - f_i) / r_ij^2  /  sum_j w_ij
+    Factor 2 for 2D consistency (Brookshaw 1985 SPH Laplacian).
     """
-    gx, gy = weighted_gradient(field, edge_index, edge_attr, num_nodes,
-                               pos=pos, prefer_dxdy=prefer_dxdy, weight_mode=weight_mode, eps=eps, Lref=Lref)
-    dgxdx, _ = weighted_gradient(gx, edge_index, edge_attr, num_nodes,
-                                 pos=pos, prefer_dxdy=prefer_dxdy, weight_mode=weight_mode, eps=eps, Lref=Lref)
-    _, dgydy = weighted_gradient(gy, edge_index, edge_attr, num_nodes,
-                                 pos=pos, prefer_dxdy=prefer_dxdy, weight_mode=weight_mode, eps=eps, Lref=Lref)
-    return dgxdx + dgydy
+    device = field.device
+    edge_index = edge_index.to(device=device, dtype=torch.long)
+    edge_attr = edge_attr.to(device=device, dtype=field.dtype)
+    if pos is not None:
+        pos = pos.to(device=device, dtype=field.dtype)
+
+    N = field.size(0)
+    if edge_index.numel() == 0 or edge_attr.numel() == 0:
+        return torch.zeros(N, device=device, dtype=field.dtype)
+
+    valid = _valid_edges(edge_index, N)
+    if not torch.all(valid):
+        edge_index = edge_index[:, valid]
+        edge_attr = edge_attr[valid]
+        if edge_index.numel() == 0:
+            return torch.zeros(N, device=device, dtype=field.dtype)
+
+    edge_index, edge_attr = _half_edges(edge_index, edge_attr)
+    row, col = edge_index
+
+    dx, dy, length = _extract_dxdy_length(edge_index, edge_attr, pos, prefer_dxdy, eps)
+    if Lref != 1.0:
+        s = 1.0 / max(Lref, 1e-12)
+        dx, dy, length = dx * s, dy * s, length * s
+
+    if weight_mode == "rbf":
+        h2 = (length.mean() ** 2).clamp_min(eps)
+        w = torch.exp(-(length * length) / (h2 + eps))
+    else:
+        w = 1.0 / (length * length + eps)
+
+    df = field[col] - field[row]  # [E]
+    r2 = length * length  # [E]
+
+    # FPM/SPH Laplacian: Δf(i) = 2D * Σ_j w(f_j-f_i) / Σ_j w*r²
+    # Asymmetric accumulation: row gets +contribution, col gets - (opposite sign)
+    lap_edge = w * df  # [E]
+    num = scatter_add(lap_edge, row, dim=0, dim_size=N) - scatter_add(lap_edge, col, dim=0, dim_size=N)
+
+    # Denominator: Σ_j w*r² (symmetric)
+    r2_edge = w * r2
+    den = scatter_add(r2_edge, row, dim=0, dim_size=N) + scatter_add(r2_edge, col, dim=0, dim_size=N)
+    den = den.clamp_min(eps)
+
+    # Factor 2*D = 4 for D=2 (consistent with Taylor expansion for isotropic stencils)
+    return 4.0 * num / den
 
 
 # =========================
