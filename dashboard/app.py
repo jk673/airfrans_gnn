@@ -13,32 +13,28 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from flask import Flask, jsonify, request, render_template
 
-from dashboard.runner import (
-    TrainingSession, build_lr_scheduler, validate_scheduler_config,
-    simulate_lr_schedule, flatten_scheduler_config,
-)
-from dashboard.hpo import HpoSession, DEFAULT_SEARCH_SPACE
 from dashboard.preprocessing_runner import PreprocessingSession
-from src.benchmark import (
-    FLOW_GLIDE_METRIC_KEYS,
-    _load_flow_glide_baselines,
-    _collect_flow_glide_experiments,
-)
 
 app = Flask(__name__, template_folder=str(Path(__file__).parent / "templates"))
-session         = TrainingSession()
-hpo_session     = HpoSession()
 preproc_session = PreprocessingSession()
+
+_loader_lock = threading.RLock()
+_runner_module: Any | None = None
+_training_session: Any | None = None
+_hpo_module: Any | None = None
+_hpo_session: Any | None = None
+_benchmark_module: Any | None = None
 
 RESULTS_DIR = PROJECT_ROOT / "docs" / "experiments" / "results"
 
-# -- Default config matching scripts/main.py Config dataclass --
+# -- Default config matching scripts/train.py Config dataclass --
 DEFAULT_CONFIG = {
     "data": {
         "task": {"value": "scarce", "type": "select", "options": ["scarce", "full", "reynolds", "aoa"]},
@@ -166,6 +162,98 @@ DEFAULT_CONFIG = {
 }
 
 
+def _load_runner_module():
+    global _runner_module
+    if _runner_module is None:
+        with _loader_lock:
+            if _runner_module is None:
+                from dashboard import runner as runner_module
+                _runner_module = runner_module
+    return _runner_module
+
+
+def _get_training_session():
+    global _training_session
+    if _training_session is None:
+        with _loader_lock:
+            if _training_session is None:
+                _training_session = _load_runner_module().TrainingSession()
+    return _training_session
+
+
+def _load_hpo_module():
+    global _hpo_module
+    if _hpo_module is None:
+        with _loader_lock:
+            if _hpo_module is None:
+                from dashboard import hpo as hpo_module
+                _hpo_module = hpo_module
+    return _hpo_module
+
+
+def _get_hpo_session():
+    global _hpo_session
+    if _hpo_session is None:
+        with _loader_lock:
+            if _hpo_session is None:
+                _hpo_session = _load_hpo_module().HpoSession()
+    return _hpo_session
+
+
+def _load_benchmark_module():
+    global _benchmark_module
+    if _benchmark_module is None:
+        with _loader_lock:
+            if _benchmark_module is None:
+                from src import benchmark as benchmark_module
+                _benchmark_module = benchmark_module
+    return _benchmark_module
+
+
+def _default_training_status() -> dict:
+    return {
+        "state": "idle",
+        "session_id": "",
+        "current_epoch": 0,
+        "total_epochs": 0,
+        "best_val": None,
+        "best_epoch": -1,
+        "elapsed_sec": 0.0,
+        "error_message": "",
+        "experiment_id": "",
+        "config": {},
+        "metrics": {
+            "epochs": [],
+            "train": {},
+            "val": {},
+            "lr": [],
+        },
+    }
+
+
+def _default_hpo_status() -> dict:
+    return {
+        "state": "idle",
+        "phase": "lhs",
+        "current_trial": 0,
+        "current_params": {},
+        "total_trials": 0,
+        "n_lhs": 0,
+        "best_value": None,
+        "best_params": None,
+        "trials": [],
+        "completed_trials": 0,
+        "pruned_trials": 0,
+        "running_trials": 0,
+        "finished_trials": 0,
+        "progress_pct": 0.0,
+        "error_message": "",
+        "elapsed_sec": 0.0,
+        "current_epoch": 0,
+        "epochs_per_trial": 0,
+    }
+
+
 # -----------------------------------------------------------------------
 # Routes
 # -----------------------------------------------------------------------
@@ -182,13 +270,15 @@ def get_config():
 
 @app.route("/api/start", methods=["POST"])
 def start_training():
+    session = _get_training_session()
     if session.is_running:
         status = session.get_status()
         return jsonify({
             "status": "error",
             "message": f"Training already running (epoch {status['current_epoch']}/{status['total_epochs']})",
         }), 409
-    config = flatten_scheduler_config(request.get_json(force=True))
+    runner = _load_runner_module()
+    config = runner.flatten_scheduler_config(request.get_json(force=True))
     try:
         session.start(config)
         return jsonify({"status": "started", "session_id": session.get_status()["session_id"]})
@@ -198,7 +288,8 @@ def start_training():
 
 @app.route("/api/stop", methods=["POST"])
 def stop_training():
-    if not session.is_running:
+    session = _training_session
+    if session is None or not session.is_running:
         return jsonify({"status": "error", "message": "No training running"}), 400
     session.request_stop()
     return jsonify({"status": "stopping", "message": "Will stop after current epoch."})
@@ -206,7 +297,8 @@ def stop_training():
 
 @app.route("/api/status")
 def get_status():
-    status = session.get_status()
+    session = _training_session
+    status = session.get_status() if session is not None else _default_training_status()
     # Replace non-JSON-safe float values
     if status.get("best_val") == float("inf"):
         status["best_val"] = None
@@ -215,8 +307,9 @@ def get_status():
 
 @app.route("/api/experiments")
 def list_experiments():
-    baselines = _load_flow_glide_baselines()
-    exp_rows = _collect_flow_glide_experiments()
+    benchmark = _load_benchmark_module()
+    baselines = benchmark._load_flow_glide_baselines()
+    exp_rows = benchmark._collect_flow_glide_experiments()
 
     experiments = []
     for exp_id, vals in exp_rows:
@@ -246,7 +339,7 @@ def list_experiments():
             "duration_sec": meta.get("_duration_sec"),
             "notes": meta.get("_notes", ""),
         }
-        for i, key in enumerate(FLOW_GLIDE_METRIC_KEYS):
+        for i, key in enumerate(benchmark.FLOW_GLIDE_METRIC_KEYS):
             row[key] = vals[i] if i < len(vals) else None
         experiments.append(row)
 
@@ -273,7 +366,8 @@ def lr_preview():
     Response (400):
         error – validation error message
     """
-    data = flatten_scheduler_config(request.get_json(force=True))
+    runner = _load_runner_module()
+    data = runner.flatten_scheduler_config(request.get_json(force=True))
 
     base_lr = float(data.get("base_lr", 1e-3))
     num_epochs = int(data.get("num_epochs", 100))
@@ -285,7 +379,7 @@ def lr_preview():
             return jsonify({"error": f"metric_series must be a list of numbers: {exc}"}), 400
 
     try:
-        result = simulate_lr_schedule(data, num_epochs, base_lr, metric_series)
+        result = runner.simulate_lr_schedule(data, num_epochs, base_lr, metric_series)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -350,11 +444,13 @@ def get_experiment(exp_id):
 
 @app.route("/api/hpo/search-space")
 def hpo_search_space():
-    return jsonify([spec.to_dict() for spec in DEFAULT_SEARCH_SPACE])
+    hpo = _load_hpo_module()
+    return jsonify([spec.to_dict() for spec in hpo.DEFAULT_SEARCH_SPACE])
 
 
 @app.route("/api/hpo/start", methods=["POST"])
 def hpo_start():
+    hpo_session = _get_hpo_session()
     if hpo_session.is_running:
         status = hpo_session.get_status()
         return jsonify({
@@ -362,7 +458,8 @@ def hpo_start():
             "message": f"HPO already running (trial {status['current_trial']}/{status['total_trials']})",
         }), 409
     body = request.get_json(force=True) or {}
-    search_space = body.get("search_space", [spec.to_dict() for spec in DEFAULT_SEARCH_SPACE])
+    hpo = _load_hpo_module()
+    search_space = body.get("search_space", [spec.to_dict() for spec in hpo.DEFAULT_SEARCH_SPACE])
     settings     = body.get("settings", {})
     try:
         hpo_session.start(search_space, settings)
@@ -373,7 +470,8 @@ def hpo_start():
 
 @app.route("/api/hpo/stop", methods=["POST"])
 def hpo_stop():
-    if not hpo_session.is_running:
+    hpo_session = _hpo_session
+    if hpo_session is None or not hpo_session.is_running:
         return jsonify({"status": "error", "message": "No HPO running"}), 400
     hpo_session.request_stop()
     return jsonify({"status": "stopping", "message": "Will stop after current trial."})
@@ -381,7 +479,8 @@ def hpo_stop():
 
 @app.route("/api/hpo/status")
 def hpo_status():
-    status = hpo_session.get_status()
+    hpo_session = _hpo_session
+    status = hpo_session.get_status() if hpo_session is not None else _default_hpo_status()
     if status.get("best_value") == float("inf"):
         status["best_value"] = None
     return jsonify(status)

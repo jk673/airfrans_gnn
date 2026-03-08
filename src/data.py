@@ -105,7 +105,7 @@ def _prep_graph_for_norm(g):
 
 
 # ---------------------------------------------------------------------------
-# BC masks and node area (merged from preprocessing.py)
+# BC masks and node area (merged from physics_prep.py)
 # ---------------------------------------------------------------------------
 
 def _half_edges(edge_index, edge_attr):

@@ -16,8 +16,8 @@ AirfRANS GNN is a physics-informed GNN training pipeline for 2D airfoil CFD surr
 - `chmod +x setup_env.sh && ./setup_env.sh`: installs uv + Python 3.11, dependencies, and runs import checks.
 - `source .venv/bin/activate`: enable the local environment.
 - `uv sync --python 3.11`: install/update dependencies.
-- `python preprocessing/downsample_airfrans.py --root Dataset --task scarce --out-dir downsampled_graphs`
-- `python preprocessing/build_edges_from_downsampled.py --in-dir downsampled_graphs --out-dir prebuilt_edges_v2 --task scarce`
+- `python scripts/downsample.py --root Dataset --task scarce --out-dir downsampled_graphs`
+- `python scripts/build_edges.py --in-dir downsampled_graphs --out-dir prebuilt_edges_v2 --task scarce`
 - `python scripts/train.py --help` / `python scripts/train_multiscale.py --help`: verify training options.
 - `python scripts/train.py` / `python scripts/train_multiscale.py`: run training.
 - `python scripts/eval_cp.py --checkpoint checkpoints/best.pt --split test` and `python scripts/score_benchmark.py --checkpoint checkpoints/best.pt --task scarce`.

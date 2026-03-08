@@ -27,10 +27,10 @@ RTX 50 시리즈 (Blackwell, sm_120) 지원을 위해 CUDA 12.8 사용.
 
 ```bash
 # Step 1: Downsample raw AirfRANS graphs (100k+ nodes → 15-30k)
-python preprocessing/downsample_airfrans_v2.py --root Dataset --task scarce --out-dir Dataset/processed_data/downsampled-graphs
+python scripts/downsample.py --root Dataset --task scarce --out-dir Dataset/processed_data/downsampled-graphs
 
 # Step 2: Build multi-scale radius-graph edges
-python preprocessing/edges_from_downsampled_v2.py --in-dir Dataset/processed_data/downsampled-graphs --out-dir Dataset/processed_data/prebuilt_edges --task scarce
+python scripts/build_edges.py --in-dir Dataset/processed_data/downsampled-graphs --out-dir Dataset/processed_data/prebuilt_edges --task scarce
 ```
 
 ### Training
@@ -71,14 +71,14 @@ pytest tests/test_physics_loss_batching.py::test_physics_loss_with_increased_bat
 
 ### Pipeline Flow
 
-Raw AirfRANS data → `preprocessing/downsample_airfrans_v2.py` (adaptive voxel sampling, preserves surface nodes) → `preprocessing/edges_from_downsampled_v2.py` (radius-graph edges with KNN backup) → Training via `scripts/train.py` or notebooks (normalize with `src/data.py`, train with `src/training.py` + physics loss, evaluate)
+Raw AirfRANS data → `scripts/downsample.py` (adaptive voxel sampling, preserves surface nodes) → `scripts/build_edges.py` (radius-graph edges with KNN backup) → Training via `scripts/train.py` or notebooks (normalize with `src/data.py`, train with `src/training.py` + physics loss, evaluate)
 
 ### Model: `EnhancedCFDModelWithGlobalContext` (defined in `src/model.py`)
 
 - **Input**: 7D node features (freestream velocity, wall distance, wall normals, position) + 10D edge features (after enrichment)
 - **Output**: 4D predictions (u, v, pressure, nu_t)
 - **Architecture**: Node/Edge encoders → 14 message-passing layers → optional `GlobalContextProcessor` (attention-based) → output decoder
-- Configuration lives in `Config` dataclass in `scripts/main.py` or CLI args in `scripts/train.py`
+- Configuration lives in `Config` dataclass in `scripts/train.py`
 
 ### Physics-Informed Loss (`src/physics_loss.py`)
 
@@ -88,7 +88,7 @@ Combined loss with curriculum learning:
 - **Momentum loss**: RANS momentum balance with skew-symmetric convection
 - **BC loss**: No-slip walls, inlet/outlet/farfield conditions
 
-Physics weights ramp up over training via linear or cosine curriculum schedule. `src/preprocessing.py:prepare_airfrans_graph_for_physics()` precomputes node areas, boundary masks, wall normals, and inlet velocities needed by the physics loss.
+Physics weights ramp up over training via linear or cosine curriculum schedule. `src/physics_prep.py:prepare_airfrans_graph_for_physics()` precomputes node areas, boundary masks, wall normals, and inlet velocities needed by the physics loss.
 
 ### Key Module Responsibilities
 
@@ -100,7 +100,7 @@ Physics weights ramp up over training via linear or cosine curriculum schedule. 
 | `src/physics_loss.py` | `NavierStokesPhysicsLoss` — RANS physics loss with curriculum scheduling (continuity/momentum/bc start→target weight ramping) |
 | `src/pipeline.py` | Declarative training API: `load_airfrans_data`, `convert_to_pyg`, `build_model`, `build_physics_loss`, `Trainer` (with `on_epoch_end` callback), `LiveDashboard` |
 | `src/benchmark.py` | `ExperimentTracker`, FLOW-GLIDE comparison table, `score_test_set`, `run_benchmark_and_log_experiment` |
-| `preprocessing/edges_from_downsampled_v2.py` | Edge construction wrapper (CLI) |
+| `scripts/build_edges.py` | Edge construction wrapper (CLI) |
 | `docs/benchmark/benchmark_reference.json` | FLOW-GLIDE 논문의 10개 baseline 메트릭 |
 
 ### Dashboard (`dashboard/`)

@@ -53,7 +53,7 @@ dashboard/
 
 ### Tab 1 — Config
 
-모든 `scripts/main.py`의 `Config` dataclass 필드를 그룹별로 제공:
+모든 `scripts/train.py`의 `Config` dataclass 필드를 그룹별로 제공:
 
 | Group | Fields |
 |-------|--------|
@@ -99,7 +99,7 @@ TrainingState (dataclass)
 ```
 
 - **Thread safety**: `threading.Lock`으로 상태 접근, `threading.Event`로 조기 종료 시그널
-- **학습 파이프라인**: `scripts/main.py`와 동일한 흐름을 `src/pipeline` 함수들로 재사용
+- **학습 파이프라인**: `scripts/train.py`와 동일한 흐름을 `src/pipeline` 함수들로 재사용
 - **콜백**: `Trainer.fit(on_epoch_end=callback)` — 매 epoch 끝에서 상태 업데이트 + 조기종료 체크
 
 ### Trainer.fit() Callback (src/pipeline.py 수정)
@@ -116,7 +116,7 @@ def fit(self, train_loader, val_loader, num_epochs, routine, on_epoch_end=None):
             break
 ```
 
-기존 `scripts/main.py`와 완전 호환 (콜백 미전달 시 기존 동작).
+기존 `scripts/train.py`와 완전 호환 (콜백 미전달 시 기존 동작).
 
 ## Edge Cases
 

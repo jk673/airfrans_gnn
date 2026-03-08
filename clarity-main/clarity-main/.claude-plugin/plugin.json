@@ -1,0 +1,30 @@
+{
+  "name": "clarity",
+  "version": "1.0.0",
+  "description": "Plain-language explanations of what Claude Code built, changed, or planned. Clarity walks through AI development work in jargon-free language so non-programmers can understand what happened, why, and what the risks are.",
+  "author": {
+    "name": "Ashby",
+    "email": "contact@ashby.systems",
+    "url": "https://ashby.systems"
+  },
+  "homepage": "https://ashby.systems/clarity",
+  "repository": "https://github.com/ashbysystems/clarity",
+  "license": "Apache-2.0",
+  "keywords": [
+    "plain-language",
+    "code-explanation",
+    "non-programmer",
+    "ai-transparency",
+    "explainability",
+    "human-oversight",
+    "ai-governance"
+  ],
+  "commands": [
+    "./commands/explain.md",
+    "./commands/session.md",
+    "./commands/project.md",
+    "./commands/config.md",
+    "./commands/help.md"
+  ],
+  "skills": "./skills/"
+}

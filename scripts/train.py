@@ -2,7 +2,7 @@
 """Declarative AirfRANS training script.
 
 Usage:
-    python scripts/main.py
+    python scripts/train.py
 """
 
 import sys

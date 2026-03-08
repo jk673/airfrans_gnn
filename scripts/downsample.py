@@ -180,7 +180,7 @@ def _get_real_index(ds, loop_idx: int) -> int:
 
 
 def _parse_args() -> 'DownsampleConfigV2':
-    from preprocessing.config_v2 import DownsampleConfigV2
+    from scripts.preprocess_config import DownsampleConfigV2
     defaults = DownsampleConfigV2()
     ap = argparse.ArgumentParser(description='Downsample AirfRANS graphs — V2.')
     ap.add_argument('--root', type=str, default=defaults.root)

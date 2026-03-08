@@ -61,7 +61,7 @@ class PreprocessingSession:
             self._state = PreprocessingState(state="running", step="downsample")
         self._thread = threading.Thread(
             target=self._run_step,
-            args=("downsample", "preprocessing/downsample_airfrans_v2.py", config_dict),
+            args=("downsample", "scripts/downsample.py", config_dict),
             daemon=True,
         )
         self._thread.start()
@@ -74,7 +74,7 @@ class PreprocessingSession:
             self._state = PreprocessingState(state="running", step="edges")
         self._thread = threading.Thread(
             target=self._run_step,
-            args=("edges", "preprocessing/edges_from_downsampled_v2.py", config_dict),
+            args=("edges", "scripts/build_edges.py", config_dict),
             daemon=True,
         )
         self._thread.start()

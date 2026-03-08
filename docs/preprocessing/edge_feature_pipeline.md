@@ -29,7 +29,7 @@ AirfRANS GNN에서 엣지 피처가 생성되고 최종 훈련에 사용되기�
 
 ## Stage 1: 오프라인 전처리
 
-**실행 스크립트**: `preprocessing/edges_from_downsampled_v2.py`
+**실행 스크립트**: `scripts/build_edges.py`
 **핵심 함수**: `src/edge_construction.py:build_edges_for_graph()`
 **출력**: `prebuilt_edges_v2/<task>/{train,test}/graph_*.pt`
 
@@ -155,5 +155,5 @@ model = EnhancedCFDModelWithGlobalContext(
 | `src/edge_construction.py` | 엣지 구조 생성 + 5D/3D `edge_attr` 저장 |
 | `src/utils.py` | `prep_graph`, `_prep_graph_for_norm`, `ensure_edge_features` |
 | `src/data.py` | `enrich_edge_features` (5D→10D), `load_and_prepare_data`, `NormalizedDataset` |
-| `preprocessing/edges_from_downsampled_v2.py` | Stage 1 CLI 래퍼 |
+| `scripts/build_edges.py` | Stage 1 CLI 래퍼 |
 | `prebuilt_edges_v2/` | 전처리된 엣지 파일 저장 위치 |

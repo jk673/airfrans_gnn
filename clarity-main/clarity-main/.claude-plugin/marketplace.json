@@ -1,0 +1,20 @@
+{
+  "name": "clarity-local",
+  "description": "Local marketplace for Clarity by Ashby",
+  "owner": {
+    "name": "Ashby",
+    "email": "contact@ashby.systems"
+  },
+  "plugins": [
+    {
+      "name": "clarity",
+      "description": "Plain-language explanations of AI development work",
+      "version": "1.0.0",
+      "source": "./",
+      "author": {
+        "name": "Ashby",
+        "email": "contact@ashby.systems"
+      }
+    }
+  ]
+}

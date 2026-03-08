@@ -11,7 +11,7 @@ from typing import Optional, TYPE_CHECKING
 import torch
 
 if TYPE_CHECKING:
-    from preprocessing.config_v2 import EdgeConfigV2
+    from scripts.preprocess_config import EdgeConfigV2
 from torch_geometric.data import Data
 from tqdm import tqdm
 
@@ -20,7 +20,7 @@ _proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if _proj_root not in sys.path:
     sys.path.insert(0, _proj_root)
 
-from src.preprocessing import build_bc_masks_airfrans
+from src.physics_prep import build_bc_masks_airfrans
 
 
 def _import_preprocess_module(path: Optional[str] = None):
@@ -39,7 +39,7 @@ def _import_preprocess_module(path: Optional[str] = None):
 
 
 def _parse_args() -> 'EdgeConfigV2':
-    from preprocessing.config_v2 import EdgeConfigV2
+    from scripts.preprocess_config import EdgeConfigV2
     defaults = EdgeConfigV2()
     ap = argparse.ArgumentParser(description='Add edges to downsampled graphs — V2.')
     ap.add_argument('--in-dir', type=str, default=defaults.in_dir)

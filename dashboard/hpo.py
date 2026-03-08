@@ -655,7 +655,7 @@ class HpoSession:
                     self._state.current_params = None
 
                 if pruned_ev.is_set():
-                    raise _optuna.exceptions.TrialPruned(
+                    raise _optuna.exceptions.TrialPruned("Trial pruned by stop signal")
 
                 return final_val
 

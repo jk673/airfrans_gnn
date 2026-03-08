@@ -541,7 +541,7 @@
       <h3 style="display:flex;align-items:center;gap:12px;">
         Step 1 &mdash; Downsample Raw Data
         <span style="font-size:0.8em;font-weight:normal;color:#666;">
-          preprocessing/downsample_airfrans_v2.py
+          scripts/downsample.py
         </span>
       </h3>
       <div id="preproc-form-downsample"></div>
@@ -556,7 +556,7 @@
       <h3 style="display:flex;align-items:center;gap:12px;">
         Step 2 &mdash; Build Graph Edges
         <span style="font-size:0.8em;font-weight:normal;color:#666;">
-          preprocessing/edges_from_downsampled_v2.py
+          scripts/build_edges.py
         </span>
       </h3>
       <div id="preproc-form-edges"></div>
@@ -605,12 +605,19 @@ Logs will appear here when a step is running...</pre>
 // ═══════════════════════════════════════════════════════════════
 // TAB SWITCHING
 // ═══════════════════════════════════════════════════════════════
+let trainingChartsInitialized = false;
+let hpoInitialized = false;
+let preprocInitialized = false;
+
 function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.querySelector(`.tabs button[onclick="switchTab('${name}')"]`).classList.add('active');
   if (name === 'experiments') loadExperiments();
+  if (name === 'training') ensureTrainingCharts();
+  if (name === 'hpo') ensureHpoInitialized();
+  if (name === 'preprocessing') ensurePreprocInitialized();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -726,7 +733,13 @@ function makeFieldRow(id, label, spec) {
   } else if (spec.type === 'int' || spec.type === 'float') {
     input = document.createElement('input');
     input.type = 'number';
-    input.value = spec.value;
+    if (spec.value === null || spec.value === undefined) {
+      input.value = '';
+      input.placeholder = 'None';
+      input.dataset.optional = '1';
+    } else {
+      input.value = spec.value;
+    }
     if (spec.type === 'float') input.step = 'any';
     if (spec.min !== undefined) input.min = spec.min;
     if (spec.max !== undefined) input.max = spec.max;
@@ -789,7 +802,14 @@ function validateConfigBeforeStart() {
     const val = input.value.trim();
     const label = input.closest('.field-row')?.querySelector('label')?.textContent || input.id;
 
-    if (val === '' || val === '-' || isNaN(Number(val))) {
+    // Allow blank for optional fields (ones with no default / placeholder "None")
+    if (val === '') {
+      if (input.hasAttribute('data-optional')) return;  // skip validation
+      errors.push(`"${label}" must be a valid number`);
+      input.classList.add('field-invalid');
+      return;
+    }
+    if (val === '-' || isNaN(Number(val))) {
       errors.push(`"${label}" must be a valid number`);
       input.classList.add('field-invalid');
       return;
@@ -916,8 +936,15 @@ function initCharts() {
   lrCtx.addEventListener('dblclick', () => charts['lr'].resetZoom());
 }
 
+function ensureTrainingCharts() {
+  if (trainingChartsInitialized) return;
+  initCharts();
+  trainingChartsInitialized = true;
+}
+
 function updateCharts(metrics) {
   if (!metrics || !metrics.epochs) return;
+  if (!trainingChartsInitialized) ensureTrainingCharts();
   const epochs = metrics.epochs;
 
   for (const key of LOSS_KEYS) {
@@ -1002,6 +1029,7 @@ async function pollStatus() {
     const prevTrainState = lastState;
     updateStatusBar(data);
     if (['training', 'stopping'].includes(data.state)) {
+      ensureTrainingCharts();
       updateCharts(data.metrics);
     }
     // Reload after user-initiated stop completes
@@ -1341,6 +1369,14 @@ let hpoHistoryChart  = null;
 let hpoConvergeChart = null;
 let hpoLastState = 'idle';
 
+async function ensureHpoInitialized() {
+  if (hpoInitialized) return;
+  initHpoCharts();
+  await loadHpoSearchSpace();
+  await pollHpoStatus();
+  hpoInitialized = true;
+}
+
 // ── Load search space from /api/hpo/search-space ──────────────
 async function loadHpoSearchSpace() {
   try {
@@ -1382,8 +1418,9 @@ function renderSearchSpaceTable(specs) {
   }
 }
 
-function resetHpoDefaults() {
-  loadHpoSearchSpace();
+async function resetHpoDefaults() {
+  await ensureHpoInitialized();
+  await loadHpoSearchSpace();
 }
 
 function collectHpoSearchSpace() {
@@ -1666,6 +1703,7 @@ async function pollHpoStatus() {
 
 // ── Start / Stop ──────────────────────────────────────────────
 async function startHpo() {
+  await ensureHpoInitialized();
   const errEl = document.getElementById('hpo-error');
   errEl.style.display = 'none';
 
@@ -1773,6 +1811,13 @@ async function applyBestToConfig() {
 let preprocSchema = {};
 let lastPreprocLogLen = 0;
 
+async function ensurePreprocInitialized() {
+  if (preprocInitialized) return;
+  await loadPreprocConfig();
+  await pollPreprocStatus();
+  preprocInitialized = true;
+}
+
 async function loadPreprocConfig() {
   const res = await fetch('/api/preproc/config');
   preprocSchema = await res.json();
@@ -1849,6 +1894,7 @@ function collectPreprocForm(containerId, schema) {
 }
 
 async function startDownsample() {
+  await ensurePreprocInitialized();
   document.getElementById('preproc-ds-error').textContent = '';
   const config = collectPreprocForm('preproc-form-downsample', preprocSchema.downsample);
   lastPreprocLogLen = 0;
@@ -1864,6 +1910,7 @@ async function startDownsample() {
 }
 
 async function startEdges() {
+  await ensurePreprocInitialized();
   document.getElementById('preproc-edges-error').textContent = '';
   const config = collectPreprocForm('preproc-form-edges', preprocSchema.edges);
   lastPreprocLogLen = 0;
@@ -1938,18 +1985,12 @@ async function pollPreprocStatus() {
 // INIT
 // ═══════════════════════════════════════════════════════════════
 loadConfig();
-initCharts();
-initHpoCharts();
-loadHpoSearchSpace();
-loadPreprocConfig();
 pollStatus();
 pollGpu();
-pollHpoStatus();
-pollPreprocStatus();
 setInterval(pollStatus, 3000);
 setInterval(pollGpu, 2000);
-setInterval(pollHpoStatus, 3000);
-setInterval(pollPreprocStatus, 2000);
+setInterval(() => { if (hpoInitialized) pollHpoStatus(); }, 3000);
+setInterval(() => { if (preprocInitialized) pollPreprocStatus(); }, 2000);
 </script>
 </body>
 </html>
