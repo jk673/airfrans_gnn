@@ -1,0 +1,52 @@
+{
+  "volume_rel_l2": 0.14635370163350733,
+  "surface_rel_l2": 0.160759340280206,
+  "cd_relative_error": 1.0097453731049941,
+  "cl_relative_error": 0.32486440477063966,
+  "rho_d": 0.9548872180451128,
+  "rho_l": 0.9879699248120299,
+  "_experiment_id": "EXP_0001",
+  "_timestamp": "2026-03-08 14:13:11 UTC",
+  "_model_name": "scarce-h48-l10",
+  "_task": "scarce",
+  "_hidden": 48,
+  "_layers": 10,
+  "_epochs": null,
+  "_n_parameters": 384580,
+  "_duration_sec": 2146.752716064453,
+  "_notes": "",
+  "_train_status": "completed",
+  "_train_best_val_loss": 0.0033219560398720207,
+  "_train_best_epoch": 179,
+  "_train_final_train_loss": 0.004020349077311241,
+  "_train_final_val_loss": 0.003749172145035118,
+  "_train_artifacts_uploaded": 0,
+  "_config": {
+    "task": "scarce",
+    "hidden": 48,
+    "layers": 10,
+    "scheduler": {
+      "type": "ReduceLROnPlateau",
+      "params": {
+        "scheduler_T_0": 10,
+        "scheduler_T_max": 190,
+        "scheduler_T_mult": 1,
+        "scheduler_eta_min": 0,
+        "scheduler_factor": 0.5,
+        "scheduler_gamma": 0.76,
+        "scheduler_milestones": "30,60,90",
+        "scheduler_min_lr": 1e-06,
+        "scheduler_patience": 10,
+        "scheduler_step_mode": "epoch",
+        "scheduler_step_size": 10,
+        "scheduler_warmup_end_factor": 1.0,
+        "scheduler_warmup_start_factor": 0.1,
+        "scheduler_warmup_steps": 0
+      },
+      "step_mode": "epoch",
+      "warmup_steps": 0,
+      "first_lr": 0.0010560685583058836,
+      "final_lr": 1e-06
+    }
+  }
+}

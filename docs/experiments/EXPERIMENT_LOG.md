@@ -1,6 +1,6 @@
 # AirfRANS 2D Airfoil - GNN Surrogate
 
-Auto-generated benchmark comparison. Updated: 2026-03-02 23:18:41 UTC
+Auto-generated benchmark comparison. Updated: 2026-03-08 14:13:11 UTC
 
 ## Benchmark Comparison
 
@@ -8,32 +8,32 @@ Auto-generated benchmark comparison. Updated: 2026-03-02 23:18:41 UTC
 |---|---|---|---|---|---|---|
 | Transolver | 0.0100 | 0.0352 | 0.6316 | 0.1122 | 0.8750 | 0.9946 |
 | FLOW-GLIDE | 0.0038 | 0.0063 | 0.5072 | 0.1029 | 0.9286 | 0.9964 |
-| **EXP_0001** (scarce-h64-l8) | 0.6405 | 0.7011 | 1.7329 | 0.7744 | 0.8977 | 0.9444 |
+| **EXP_0001** (scarce-h48-l10) | 0.1464 | 0.1608 | 1.0097 | 0.3249 | 0.9549 | 0.9880 |
 
 ---
 
 ## Experiment Details
 
-### EXP_0001 — 2026-03-02 23:18:41 UTC
+### EXP_0001 — 2026-03-08 14:13:11 UTC
 
-**Model:** scarce-h64-l8 | **Task:** scarce | **Parameters:** 471,940 | **Duration:** 2m 22s
+**Model:** scarce-h48-l10 | **Task:** scarce | **Parameters:** 384,580 | **Duration:** 35m 46s
 
 | Benchmark Metric | Value |
 |--------|-------|
-| volume_rel_l2 | 0.6405 |
-| surface_rel_l2 | 0.7011 |
-| cd_relative_error | 1.7329 |
-| cl_relative_error | 0.7744 |
-| rho_d | 0.8977 |
-| rho_l | 0.9444 |
+| volume_rel_l2 | 0.1464 |
+| surface_rel_l2 | 0.1608 |
+| cd_relative_error | 1.0097 |
+| cl_relative_error | 0.3249 |
+| rho_d | 0.9549 |
+| rho_l | 0.9880 |
 
 | Training Metric | Value |
 |--------|-------|
 | status | completed |
-| best_val_loss | 0.0758 |
-| best_epoch | 17 |
-| finalloss | 0.1963 |
-| final_val_loss | 0.1138 |
+| best_val_loss | 0.0033 |
+| best_epoch | 179 |
+| finalloss | 0.0040 |
+| final_val_loss | 0.0037 |
 | artifacts_uploaded | 0 |
 
 <details><summary>Config</summary>
@@ -41,17 +41,17 @@ Auto-generated benchmark comparison. Updated: 2026-03-02 23:18:41 UTC
 ```json
 {
   "task": "scarce",
-  "hidden": 64,
-  "layers": 8,
+  "hidden": 48,
+  "layers": 10,
   "scheduler": {
-    "type": "StepLR",
+    "type": "ReduceLROnPlateau",
     "params": {
       "scheduler_T_0": 10,
-      "scheduler_T_max": 80,
+      "scheduler_T_max": 190,
       "scheduler_T_mult": 1,
       "scheduler_eta_min": 0,
       "scheduler_factor": 0.5,
-      "scheduler_gamma": 0.66,
+      "scheduler_gamma": 0.76,
       "scheduler_milestones": "30,60,90",
       "scheduler_min_lr": 1e-06,
       "scheduler_patience": 10,
@@ -63,8 +63,8 @@ Auto-generated benchmark comparison. Updated: 2026-03-02 23:18:41 UTC
     },
     "step_mode": "epoch",
     "warmup_steps": 0,
-    "first_lr": 0.0009667421268223949,
-    "final_lr": 0.00042111287044383524
+    "first_lr": 0.0010560685583058836,
+    "final_lr": 1e-06
   }
 }
 ```
