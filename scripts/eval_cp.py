@@ -46,7 +46,7 @@ from src.metrics import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-PREBUILT_ROOT = PROJECT_ROOT / "prebuilt_edges_v2"
+PREBUILT_ROOT = PROJECT_ROOT / "Dataset" / "processed_data" / "prebuilt_edges"
 
 
 def parse_args():

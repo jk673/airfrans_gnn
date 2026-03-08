@@ -403,9 +403,9 @@ def main():
     y_scaler = data_bundle.y_scaler
 
     # Build test loader
-    test_graphs = data_bundle.val_graphs  # 'val_graphs' holds test split for prebuilt_edges_v2
+    test_graphs = data_bundle.val_graphs  # 'val_graphs' holds test split for prebuilt_edges
     if not isinstance(test_graphs, list) or len(test_graphs) == 0:
-        raise ValueError("No test graphs found. Check prebuilt_edges_v2/<task>/test/ exists.")
+        raise ValueError("No test graphs found. Check Dataset/processed_data/prebuilt_edges/<task>/test/ exists.")
 
     test_prepped = [enrich_edge_features(_prep_graph_for_norm(g)) for g in test_graphs]
     test_ds = NormalizedDataset(test_prepped, x_scaler, y_scaler)

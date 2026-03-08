@@ -188,7 +188,7 @@ python scripts/optuna_hpo.py \
 
 ### 8. 실험 문서 리셋
 
-`scripts/reset_experiment_docs.py`를 이용해 실험 로그(`experiments/EXPERIMENT_LOG.md`)와
+`scripts/reset_experiment_docs.py`를 이용해 실험 로그(`docs/experiments/EXPERIMENT_LOG.md`)와
 `docs/optuna/EXAMPLES_OPTUNA.md`를 초기 상태로 재생성할 수 있습니다.
 
 ```bash

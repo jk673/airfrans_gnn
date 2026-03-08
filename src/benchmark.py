@@ -189,7 +189,7 @@ def score_test_set(
 # FLOW-GLIDE table constants
 # ---------------------------------------------------------------------------
 
-FLOW_GLIDE_TABLE_PATH = PROJECT_ROOT / "experiments/flow_glide_comparison_table.md"
+FLOW_GLIDE_TABLE_PATH = PROJECT_ROOT / "docs/experiments/flow_glide_comparison_table.md"
 FLOW_GLIDE_METRIC_KEYS = [
     "volume_rel_l2",
     "surface_rel_l2",
@@ -248,7 +248,7 @@ def _load_flow_glide_baselines() -> dict:
 
 def _collect_flow_glide_experiments():
     rows = []
-    results_dir = PROJECT_ROOT / "experiments" / "results"
+    results_dir = PROJECT_ROOT / "docs" / "experiments" / "results"
     if not results_dir.exists():
         return rows
 
@@ -351,7 +351,7 @@ class ExperimentTracker:
 
     def __init__(
         self,
-        log_dir: str | Path = "experiments",
+        log_dir: str | Path = "docs/experiments",
         project_name: str = "AirfRANS GNN Benchmark",
         reference_path: str | Path | None = None,
     ):
@@ -602,7 +602,7 @@ def run_benchmark_and_log_experiment(
 ):
     """Compute FLOW-GLIDE benchmark metrics, log experiment, and update table."""
     tracker = tracker or ExperimentTracker(
-        log_dir=PROJECT_ROOT / "experiments",
+        log_dir=PROJECT_ROOT / "docs" / "experiments",
         project_name="AirfRANS 2D Airfoil - GNN Surrogate",
         reference_path=PROJECT_ROOT / "docs/benchmark/benchmark_reference.json",
     )
@@ -672,7 +672,7 @@ def run_benchmark_and_log_experiment(
             _update_flow_glide_comparison_table()
         except Exception as table_exc:
             print(f"[experiment log] Flow-Glide comparison table update failed: {table_exc}")
-        print(f"[experiment log] Logged experiment {exp_id} -> experiments/EXPERIMENT_LOG.md")
+        print(f"[experiment log] Logged experiment {exp_id} -> docs/experiments/EXPERIMENT_LOG.md")
         print(f"[experiment log] Flow-Glide comparison table updated -> {FLOW_GLIDE_TABLE_PATH}")
         print(f"[experiment log] Benchmark metrics: "
               f"volume_rel_l2={benchmark_metrics.get('volume_rel_l2', float('nan')):.4f}, "

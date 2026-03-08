@@ -130,7 +130,7 @@ def fit(self, train_loader, val_loader, num_epochs, routine, on_epoch_end=None):
 
 ## Theme
 
-기존 `experiments/dashboard.html`과 동일한 다크 테마:
+기존 `docs/experiments/dashboard.html`과 동일한 다크 테마:
 
 - Background: `#1a1a2e`, Card: `#16213e`
 - Text: `#eee`, Accent: `#4ecca3`

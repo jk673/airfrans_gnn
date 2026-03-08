@@ -3,7 +3,7 @@ name: daily-notebook
 description: >
   Use after completing any implementation change to log important findings and
   code changes in the daily notebook. Creates or updates
-  daily_notebook/YYYY-MM-DD.md in the project working directory.
+  docs/daily_notebook/YYYY-MM-DD.md in the project working directory.
 ---
 
 # Daily Notebook Skill
@@ -14,8 +14,8 @@ After completing an implementation, write a concise entry to the daily notebook.
 
 1. **Determine today's date** from the session context or memory (currentDate).
 
-2. **Resolve the notebook path**: `<project_root>/daily_notebook/YYYY-MM-DD.md`
-   - Create `daily_notebook/` if it doesn't exist.
+2. **Resolve the notebook path**: `<project_root>/docs/daily_notebook/YYYY-MM-DD.md`
+   - Create `docs/daily_notebook/` if it doesn't exist.
    - Append to an existing file; create if new.
 
 3. **Write the entry** using this template (append, do not overwrite):

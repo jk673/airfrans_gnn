@@ -1,8 +1,8 @@
 # FLOW-GLIDE 성능 지표 정의 (`volume_rel_l2`, `surface_rel_l2`, `cd_relative_error`, `cl_relative_error`, `rho_D`, `rho_L`)
 
 `scripts/train.py` 종료 시 `run_benchmark_and_log_experiment()`가 `scripts/score_benchmark.py`의
-`score_test_set()`을 호출해 아래 6개 지표를 계산합니다. 저장 위치는 `experiments/results/*.json`이며,
-`Flow-Glide` 비교표(`experiments/flow_glide_comparison_table.md`)에는 baseline과 함께 누적됩니다.
+`score_test_set()`을 호출해 아래 6개 지표를 계산합니다. 저장 위치는 `docs/experiments/results/*.json`이며,
+`Flow-Glide` 비교표(`docs/experiments/flow_glide_comparison_table.md`)에는 baseline과 함께 누적됩니다.
 
 ## 1) 볼륨 상대 L2 (`volume_rel_l2`)
 
@@ -93,7 +93,7 @@ surface_rel_l2 = sqrt( sum((p_pred_surf - p_gt_surf)^2) / sum(p_gt_surf^2) )
 - `scripts/train.py` 종료 시:
   - `score_test_set()` → 6개 지표 계산
   - `train.py`의 `ExperimentTracker` 저장
-  - `experiments/flow_glide_comparison_table.md` 자동 갱신
+  - `docs/experiments/flow_glide_comparison_table.md` 자동 갱신
 - 사용 지표를 그대로 `EXP_*.json`(`_benchmark_metric` 키)과 테이블에 기록합니다.
 
 ## 참고 코드 위치

@@ -45,8 +45,9 @@ coverage.xml
 # wandb
 wandb/
 
-# Project data
+# Project data (all dataset artifacts live under Dataset/)
 Dataset/
+raw_data/
 downsampled_graphs_v2/
 prebuilt_edges_v2/
 processed_edges/

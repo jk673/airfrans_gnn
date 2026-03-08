@@ -24,6 +24,7 @@ from dashboard.runner import (
     simulate_lr_schedule, flatten_scheduler_config,
 )
 from dashboard.hpo import HpoSession, DEFAULT_SEARCH_SPACE
+from dashboard.preprocessing_runner import PreprocessingSession
 from src.benchmark import (
     FLOW_GLIDE_METRIC_KEYS,
     _load_flow_glide_baselines,
@@ -31,10 +32,11 @@ from src.benchmark import (
 )
 
 app = Flask(__name__, template_folder=str(Path(__file__).parent / "templates"))
-session     = TrainingSession()
-hpo_session = HpoSession()
+session         = TrainingSession()
+hpo_session     = HpoSession()
+preproc_session = PreprocessingSession()
 
-RESULTS_DIR = PROJECT_ROOT / "experiments" / "results"
+RESULTS_DIR = PROJECT_ROOT / "docs" / "experiments" / "results"
 
 # -- Default config matching scripts/main.py Config dataclass --
 DEFAULT_CONFIG = {
@@ -383,6 +385,84 @@ def hpo_status():
     if status.get("best_value") == float("inf"):
         status["best_value"] = None
     return jsonify(status)
+
+
+# -----------------------------------------------------------------------
+# Preprocessing routes
+# -----------------------------------------------------------------------
+
+DOWNSAMPLE_CONFIG = {
+    "root":             {"value": "Dataset",              "type": "text",   "help": "Root directory for the raw AirfRANS dataset"},
+    "task":             {"value": "scarce",               "type": "select", "options": ["scarce", "full"]},
+    "out_dir":          {"value": "Dataset/processed_data/downsampled-graphs","type": "text",   "help": "Output directory for downsampled graphs"},
+    "limit_train":      {"value": None,                   "type": "int",    "help": "Limit training samples processed (debug; leave blank for all)"},
+    "limit_test":       {"value": None,                   "type": "int",    "help": "Limit test samples processed (debug; leave blank for all)"},
+    "target_min_nodes": {"value": 15000,                  "type": "int",    "help": "Minimum acceptable node count after downsampling"},
+    "target_max_nodes": {"value": 30000,                  "type": "int",    "help": "Maximum acceptable node count after downsampling"},
+    "voxel_frac":       {"value": 0.01,                   "type": "float",  "help": "Initial voxel size as a fraction of chord length"},
+    "voxel_iters":      {"value": 5,                      "type": "int",    "help": "Number of iterations for adaptive voxel size search"},
+    "voxel_rep":        {"value": "gradient",             "type": "select", "options": ["gradient", "centroid", "first"],
+                         "help": "Voxel representative selection policy"},
+}
+
+EDGE_CONFIG = {
+    "in_dir":                  {"value": "Dataset/processed_data/downsampled-graphs", "type": "text",  "help": "Input directory with downsampled graphs"},
+    "out_dir":                 {"value": "Dataset/processed_data/prebuilt_edges",     "type": "text",  "help": "Output directory for graphs with edges"},
+    "task":                    {"value": "scarce",   "type": "select", "options": ["scarce", "full"]},
+    "global_radius":           {"value": 0.02,       "type": "float",  "help": "Radius for global (volume) edge construction"},
+    "surface_radius":          {"value": 0.01,       "type": "float",  "help": "Radius for surface-specific edge construction"},
+    "max_num_neighbors":       {"value": 48,         "type": "int",    "help": "Maximum neighbors per node in radius graph"},
+    "surface_ring":            {"value": False,      "type": "bool",   "help": "Enable surface ring connectivity"},
+    "denormalize":             {"value": False,      "type": "bool",   "help": "Denormalize features before edge construction"},
+    "min_degree":              {"value": 2,          "type": "int",    "help": "Minimum degree threshold for QA checks"},
+    "knn_backup_k":            {"value": 4,          "type": "int",    "help": "Number of KNN neighbors for backup edges on isolated nodes"},
+    "knn_max_radius":          {"value": 0.05,       "type": "float",  "help": "Maximum radius for KNN backup edges"},
+    "max_isolated_fraction":   {"value": 0.01,       "type": "float",  "help": "QA warn threshold: fraction of isolated nodes"},
+    "max_low_degree_fraction": {"value": 0.05,       "type": "float",  "help": "QA warn threshold: fraction of low-degree nodes"},
+    "qa_fail_fast":            {"value": False,      "type": "bool",   "help": "Raise error instead of warning on QA threshold violation"},
+}
+
+
+@app.route("/api/preproc/config")
+def preproc_config():
+    return jsonify({"downsample": DOWNSAMPLE_CONFIG, "edges": EDGE_CONFIG})
+
+
+@app.route("/api/preproc/start/downsample", methods=["POST"])
+def preproc_start_downsample():
+    if preproc_session.is_running:
+        return jsonify({"status": "error", "message": "A preprocessing step is already running."}), 409
+    config = request.get_json(force=True) or {}
+    try:
+        preproc_session.start_downsample(config)
+        return jsonify({"status": "started", "step": "downsample"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+
+@app.route("/api/preproc/start/edges", methods=["POST"])
+def preproc_start_edges():
+    if preproc_session.is_running:
+        return jsonify({"status": "error", "message": "A preprocessing step is already running."}), 409
+    config = request.get_json(force=True) or {}
+    try:
+        preproc_session.start_edges(config)
+        return jsonify({"status": "started", "step": "edges"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+
+@app.route("/api/preproc/stop", methods=["POST"])
+def preproc_stop():
+    if not preproc_session.is_running:
+        return jsonify({"status": "error", "message": "No preprocessing running."}), 400
+    preproc_session.request_stop()
+    return jsonify({"status": "stopping", "message": "Stop signal sent."})
+
+
+@app.route("/api/preproc/status")
+def preproc_status():
+    return jsonify(preproc_session.get_status())
 
 
 # -----------------------------------------------------------------------

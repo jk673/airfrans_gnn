@@ -338,6 +338,7 @@
     <button onclick="switchTab('training')">Training</button>
     <button onclick="switchTab('experiments')">Experiments</button>
     <button onclick="switchTab('hpo')">HPO</button>
+    <button onclick="switchTab('preprocessing')">Preprocessing</button>
   </div>
 </header>
 
@@ -530,6 +531,60 @@
 
   </div><!-- /.hpo-layout -->
 </div><!-- /#tab-hpo -->
+
+<!-- ═══════════════════════ PREPROCESSING TAB ═══════════════════════ -->
+<div id="tab-preprocessing" class="tab-panel">
+  <div style="max-width:900px;">
+
+    <!-- ── Step 1: Downsample ── -->
+    <div class="config-group wide" style="margin-bottom:20px;">
+      <h3 style="display:flex;align-items:center;gap:12px;">
+        Step 1 &mdash; Downsample Raw Data
+        <span style="font-size:0.8em;font-weight:normal;color:#666;">
+          preprocessing/downsample_airfrans_v2.py
+        </span>
+      </h3>
+      <div id="preproc-form-downsample"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
+        <button class="btn-start" id="btn-downsample" onclick="startDownsample()">Run Downsample</button>
+        <span id="preproc-ds-error" style="color:#e74c3c;font-size:0.85em;"></span>
+      </div>
+    </div>
+
+    <!-- ── Step 2: Edge Build ── -->
+    <div class="config-group wide" style="margin-bottom:20px;">
+      <h3 style="display:flex;align-items:center;gap:12px;">
+        Step 2 &mdash; Build Graph Edges
+        <span style="font-size:0.8em;font-weight:normal;color:#666;">
+          preprocessing/edges_from_downsampled_v2.py
+        </span>
+      </h3>
+      <div id="preproc-form-edges"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
+        <button class="btn-start" id="btn-edges" onclick="startEdges()">Run Edge Build</button>
+        <span id="preproc-edges-error" style="color:#e74c3c;font-size:0.85em;"></span>
+      </div>
+    </div>
+
+    <!-- ── Status panel ── -->
+    <div class="config-group wide">
+      <h3 style="display:flex;align-items:center;gap:12px;">
+        Status
+        <span id="preproc-badge" style="padding:2px 10px;border-radius:12px;font-size:0.8em;font-weight:600;background:#888;color:#fff;">idle</span>
+        <span id="preproc-step-label" style="font-size:0.85em;color:#555;font-weight:normal;"></span>
+        <span id="preproc-elapsed" style="font-size:0.8em;color:#888;font-weight:normal;margin-left:auto;"></span>
+        <button class="btn-stop" id="btn-preproc-stop" onclick="stopPreproc()" style="display:none;">Stop</button>
+      </h3>
+      <div id="preproc-error-area" style="display:none;color:#e74c3c;margin-bottom:8px;font-size:0.85em;"></div>
+      <pre id="preproc-log"
+           style="background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;
+                  font-size:0.78em;line-height:1.5;max-height:380px;overflow-y:auto;
+                  white-space:pre-wrap;word-break:break-all;margin:0;">
+Logs will appear here when a step is running...</pre>
+    </div>
+
+  </div>
+</div><!-- /#tab-preprocessing -->
 
 <!-- ═══════════════════════ GPU MONITOR (floating) ═══════════════════════ -->
 <div class="gpu-panel" id="gpu-panel">
@@ -1713,18 +1768,188 @@ async function applyBestToConfig() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PREPROCESSING TAB
+// ═══════════════════════════════════════════════════════════════
+let preprocSchema = {};
+let lastPreprocLogLen = 0;
+
+async function loadPreprocConfig() {
+  const res = await fetch('/api/preproc/config');
+  preprocSchema = await res.json();
+  renderPreprocForm('preproc-form-downsample', preprocSchema.downsample);
+  renderPreprocForm('preproc-form-edges', preprocSchema.edges);
+}
+
+function renderPreprocForm(containerId, schema) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const prefix = containerId; // use container id as field id namespace
+  for (const [key, spec] of Object.entries(schema)) {
+    const row = makePreprocFieldRow(prefix + '.' + key, key, spec);
+    container.appendChild(row);
+  }
+}
+
+function makePreprocFieldRow(id, label, spec) {
+  const row = document.createElement('div');
+  row.className = 'field-row';
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  lbl.setAttribute('for', 'preproc-' + id);
+  row.appendChild(lbl);
+
+  let input;
+  if (spec.type === 'select') {
+    input = document.createElement('select');
+    for (const opt of spec.options) {
+      const o = document.createElement('option');
+      o.value = opt; o.textContent = opt;
+      if (opt === spec.value) o.selected = true;
+      input.appendChild(o);
+    }
+  } else if (spec.type === 'bool') {
+    input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = !!spec.value;
+  } else if (spec.type === 'int' || spec.type === 'float') {
+    input = document.createElement('input');
+    input.type = 'number';
+    if (spec.value !== null && spec.value !== undefined) input.value = spec.value;
+    if (spec.type === 'float') input.step = 'any';
+    if (spec.min !== undefined) input.min = spec.min;
+    if (spec.max !== undefined) input.max = spec.max;
+  } else {
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = spec.value || '';
+  }
+  if (spec.help) input.title = spec.help;
+  input.id = 'preproc-' + id;
+  input.dataset.dtype = spec.type;
+  row.appendChild(input);
+  return row;
+}
+
+function collectPreprocForm(containerId, schema) {
+  const result = {};
+  for (const [key, spec] of Object.entries(schema)) {
+    const el = document.getElementById('preproc-' + containerId + '.' + key);
+    if (!el) continue;
+    if (spec.type === 'bool') {
+      result[key] = el.checked;
+    } else if (spec.type === 'int') {
+      result[key] = el.value !== '' ? parseInt(el.value, 10) : null;
+    } else if (spec.type === 'float') {
+      result[key] = el.value !== '' ? parseFloat(el.value) : null;
+    } else {
+      result[key] = el.value;
+    }
+  }
+  return result;
+}
+
+async function startDownsample() {
+  document.getElementById('preproc-ds-error').textContent = '';
+  const config = collectPreprocForm('preproc-form-downsample', preprocSchema.downsample);
+  lastPreprocLogLen = 0;
+  const res = await fetch('/api/preproc/start/downsample', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(config),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    document.getElementById('preproc-ds-error').textContent = data.message || 'Error starting downsample.';
+  }
+}
+
+async function startEdges() {
+  document.getElementById('preproc-edges-error').textContent = '';
+  const config = collectPreprocForm('preproc-form-edges', preprocSchema.edges);
+  lastPreprocLogLen = 0;
+  const res = await fetch('/api/preproc/start/edges', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(config),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    document.getElementById('preproc-edges-error').textContent = data.message || 'Error starting edge build.';
+  }
+}
+
+async function stopPreproc() {
+  await fetch('/api/preproc/stop', {method: 'POST'});
+}
+
+const PREPROC_BADGE_COLORS = {
+  idle:      '#888',
+  running:   '#2563eb',
+  stopping:  '#f97316',
+  completed: '#16a34a',
+  failed:    '#dc2626',
+};
+
+async function pollPreprocStatus() {
+  const res = await fetch('/api/preproc/status');
+  const data = await res.json();
+
+  const badge = document.getElementById('preproc-badge');
+  badge.textContent = data.state;
+  badge.style.background = PREPROC_BADGE_COLORS[data.state] || '#888';
+
+  const stepLabel = document.getElementById('preproc-step-label');
+  stepLabel.textContent = data.step ? `(${data.step})` : '';
+
+  const elapsed = document.getElementById('preproc-elapsed');
+  elapsed.textContent = data.elapsed_sec > 0
+    ? `${Math.floor(data.elapsed_sec / 60)}m ${Math.floor(data.elapsed_sec % 60)}s`
+    : '';
+
+  const stopBtn = document.getElementById('btn-preproc-stop');
+  stopBtn.style.display = (data.state === 'running' || data.state === 'stopping') ? '' : 'none';
+
+  const btnDs = document.getElementById('btn-downsample');
+  const btnEdges = document.getElementById('btn-edges');
+  const busy = data.state === 'running' || data.state === 'stopping';
+  btnDs.disabled = busy;
+  btnEdges.disabled = busy;
+
+  const errArea = document.getElementById('preproc-error-area');
+  if (data.error_message) {
+    errArea.style.display = '';
+    errArea.textContent = data.error_message;
+  } else {
+    errArea.style.display = 'none';
+  }
+
+  // Append new log lines
+  const logEl = document.getElementById('preproc-log');
+  const lines = data.log_lines || [];
+  if (lines.length !== lastPreprocLogLen) {
+    logEl.textContent = lines.join('\n') || 'Logs will appear here when a step is running...';
+    lastPreprocLogLen = lines.length;
+    // Auto-scroll to bottom
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
 loadConfig();
 initCharts();
 initHpoCharts();
 loadHpoSearchSpace();
+loadPreprocConfig();
 pollStatus();
 pollGpu();
 pollHpoStatus();
+pollPreprocStatus();
 setInterval(pollStatus, 3000);
 setInterval(pollGpu, 2000);
 setInterval(pollHpoStatus, 3000);
+setInterval(pollPreprocStatus, 2000);
 </script>
 </body>
 </html>

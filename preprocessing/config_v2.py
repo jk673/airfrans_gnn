@@ -14,7 +14,7 @@ class DownsampleConfigV2:
     """Arguments for adaptive-voxel downsampling (step 1) — V2."""
     root: str = "Dataset"
     task: Literal["scarce", "full"] = "scarce"
-    out_dir: str = "downsampled_graphs_v2"
+    out_dir: str = "Dataset/processed_data/downsampled-graphs"
     limit_train: Optional[int] = None
     limit_test: Optional[int] = None
     target_min_nodes: int = 15_000
@@ -28,8 +28,8 @@ class DownsampleConfigV2:
 @dataclass
 class EdgeConfigV2:
     """Arguments for edge construction (step 2) — V2."""
-    in_dir: str = "downsampled_graphs_v2"
-    out_dir: str = "prebuilt_edges_v2"
+    in_dir: str = "Dataset/processed_data/downsampled-graphs"
+    out_dir: str = "Dataset/processed_data/prebuilt_edges"
     task: Literal["scarce", "full"] = "scarce"
     global_radius: float = 0.02
     surface_radius: float = 0.01

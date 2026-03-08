@@ -174,7 +174,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 def _write_notebook_snapshot(state: "HpoState") -> None:
     """Append an HPO mid-run snapshot to today's daily notebook."""
     today = datetime.date.today().isoformat()
-    nb_dir = _PROJECT_ROOT / "daily_notebook"
+    nb_dir = _PROJECT_ROOT / "docs" / "daily_notebook"
     nb_dir.mkdir(exist_ok=True)
     nb_path = nb_dir / f"{today}.md"
 
@@ -655,7 +655,7 @@ class HpoSession:
                     self._state.current_params = None
 
                 if pruned_ev.is_set():
-                    raise _optuna.exceptions.TrialPruned()
+                    raise _optuna.exceptions.TrialPruned(
 
                 return final_val
 

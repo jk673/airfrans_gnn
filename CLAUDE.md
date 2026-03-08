@@ -27,10 +27,10 @@ RTX 50 시리즈 (Blackwell, sm_120) 지원을 위해 CUDA 12.8 사용.
 
 ```bash
 # Step 1: Downsample raw AirfRANS graphs (100k+ nodes → 15-30k)
-python preprocessing/downsample_airfrans_v2.py --root Dataset --task scarce --out-dir downsampled_graphs_v2
+python preprocessing/downsample_airfrans_v2.py --root Dataset --task scarce --out-dir Dataset/processed_data/downsampled-graphs
 
 # Step 2: Build multi-scale radius-graph edges
-python preprocessing/edges_from_downsampled_v2.py --in-dir downsampled_graphs_v2 --out-dir prebuilt_edges_v2 --task scarce
+python preprocessing/edges_from_downsampled_v2.py --in-dir Dataset/processed_data/downsampled-graphs --out-dir Dataset/processed_data/prebuilt_edges --task scarce
 ```
 
 ### Training
@@ -118,7 +118,7 @@ Physics weights ramp up over training via linear or cosine curriculum schedule. 
 
 **Stage 1 — 오프라인 전처리** (`src/edge_construction.py:build_edges_for_graph`)
 
-`prebuilt_edges_v2/`에 저장. 두 가지 텐서를 저장:
+`Dataset/processed_data/prebuilt_edges/`에 저장. 두 가지 텐서를 저장:
 
 | 텐서 | 차원 | 피처 구성 |
 |------|------|-----------|
@@ -159,9 +159,15 @@ Uses PyG `Batch.from_data_list()` — multiple variable-size graphs concatenated
 
 ## Data Artifacts
 
-- `Dataset/` — Raw AirfRANS dataset
-- `downsampled_graphs_v2/<task>/{train,test}/graph_*.pt` — Downsampled graphs
-- `prebuilt_edges_v2/<task>/{train,test}/graph_*.pt` — Graphs with precomputed edges
+```
+Dataset/
+  raw_data/                                    — Raw AirfRANS download (AirfRANS.pt, manifest.json)
+  raw/                                         — Symlink → raw_data/ (PyG compatibility)
+  processed/                                   — PyG internal cache (auto-generated)
+  processed_data/
+    downsampled-graphs/<task>/{train,test}/    — Downsampled graphs (step 1 output)
+    prebuilt_edges/<task>/{train,test}/        — Graphs with precomputed edges (step 2 output)
+```
 
 Prebuilt graphs are aligned to the original dataset via `orig_index` field.
 

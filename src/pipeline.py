@@ -110,7 +110,7 @@ def convert_to_pyg(
         raise RuntimeError(
             f"No training graphs have node features (x). "
             f"Found {len(data.train_graphs)} graphs under task='{data.task}'. "
-            "Check that prebuilt_edges_v2/ exists for this task."
+            "Check that Dataset/processed_data/prebuilt_edges/ exists for this task."
         )
     if not y_list:
         raise RuntimeError(
@@ -357,7 +357,7 @@ class Trainer:
 class LiveDashboard:
     """Generates a self-refreshing HTML dashboard with Chart.js plots."""
 
-    def __init__(self, output_dir="experiments", refresh_every=1):
+    def __init__(self, output_dir="docs/experiments", refresh_every=1):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.metrics: dict[str, Any] = {"epochs": [], "train": {}, "val": {}, "lr": []}
@@ -563,7 +563,7 @@ def plot_pred_vs_gt(dm, y_pred, channel=2, show_mesh=True, mask_airfoil=True,
     plt.show()
 
 
-def plot_training_loss(history: dict, save_dir: str = "experiments/loss_signals"):
+def plot_training_loss(history: dict, save_dir: str = "docs/experiments/loss_signals"):
     """Plot loss curves from a Trainer history dict."""
     import matplotlib.pyplot as plt
 

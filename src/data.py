@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from torch_geometric.data import Data, Batch
 
 
-PREBUILT_EDGES_DIR = Path(__file__).resolve().parents[1] / "prebuilt_edges_v2"
+PREBUILT_EDGES_DIR = Path(__file__).resolve().parents[1] / "Dataset" / "processed_data" / "prebuilt_edges"
 
 
 # ---------------------------------------------------------------------------
