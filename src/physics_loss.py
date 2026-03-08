@@ -689,10 +689,8 @@ class NavierStokesPhysicsLoss(nn.Module):
             uv = u * v
             du2dx, _ = weighted_gradient(u2, edge_index, edge_attr.to(device), num_nodes,
                                          pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
-            _, duvdy = weighted_gradient(uv, edge_index, edge_attr.to(device), num_nodes,
-                                         pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
-            duvdx, _ = weighted_gradient(uv, edge_index, edge_attr.to(device), num_nodes,
-                                         pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
+            duvdx, duvdy = weighted_gradient(uv, edge_index, edge_attr.to(device), num_nodes,
+                                             pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
             _, dv2dy = weighted_gradient(v2, edge_index, edge_attr.to(device), num_nodes,
                                          pos=pos_phys, prefer_dxdy=self.prefer_dxdy, weight_mode=self.weight_mode, Lref=self.Lref)
             conv_u = 0.5 * (conv_u_std + (du2dx + duvdy))
